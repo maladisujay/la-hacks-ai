@@ -318,3 +318,18 @@ button:focus-visible, input:focus-visible, [data-sel]:focus-visible, [data-try]:
 .vx-check input { width: 16px; margin: 0 8px 0 0; vertical-align: -2px; }
 .vx-check a { color: var(--vb); }
 .vx-btn:disabled { opacity: .45; cursor: not-allowed; }
+.spots { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.spot { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--hair); background: var(--board); color: var(--graphite); }
+.spot.on { background: var(--ink); color: var(--board); border-color: var(--ink); }
+.shop-this { margin: 4px 0 12px; }
+.layer .shoppable { font-family: var(--mono); font-size: 12px; color: var(--ai-text); margin-left: 6px; }
+.s-footer { display: grid; grid-template-columns: 1fr auto; gap: 14px 24px; padding: 22px 28px; border-top: 1px solid #EEF0F4; background-color: #FBFCFE; }
+.s-footer.trying { outline: 1.5px solid #C9B63A; outline-offset: -2px; }
+.s-flogo { font-family: var(--s-display); font-weight: 800; font-size: 18px; }
+.s-flogo span { display: block; font-family: var(--s-body); font-weight: 400; font-size: 12.5px; color: #4A5672; }
+.s-apps { display: flex; gap: 10px; }
+.s-apps span { display: flex; align-items: center; gap: 6px; font-size: 12.5px; border: 1px solid #DDE2EC; border-radius: 8px; padding: 6px 10px; background: #fff; }
+.s-apps img { width: 22px; height: 22px; object-fit: contain; }
+.s-apps .dash { width: 20px; height: 20px; border: 1.25px dashed var(--ai-stroke); border-radius: 4px; display: inline-block; }
+.s-apps.trying { outline: 1.5px solid #C9B63A; outline-offset: 3px; border-radius: 8px; }
+.s-flinks { grid-column: 1 / -1; font-size: 12px; color: #6B7590; }

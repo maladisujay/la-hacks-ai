@@ -81,7 +81,7 @@ const ICON = { nav: "▭", heading: "T", text: "¶", button: "▭", illustration
 function renderRail() {
   $("#rail").innerHTML = `<div class="label">Layers</div>
     <div class="layer frame"><span class="ico">#</span>Desktop — Landing</div>
-    ${els().map((e) => `<div class="layer child ${e.key === ui.sel ? "sel" : ""}" data-sel="${e.key}" tabindex="0" role="button" aria-pressed="${e.key === ui.sel}"><span class="ico">${ICON[e.kind]}</span>${esc(e.name)}<span class="mark ${e.authorship === "ai" ? "ai" : ""}"></span></div>`).join("")}
+    ${els().map((e) => `<div class="layer child ${e.key === ui.sel ? "sel" : ""}" data-sel="${e.key}" tabindex="0" role="button" aria-pressed="${e.key === ui.sel}"><span class="ico">${ICON[e.kind]}</span>${esc(e.name)}${SHOP[e.kind] ? `<span class="shoppable" title="Has assets in the shop">shop</span>` : ""}<span class="mark ${e.authorship === "ai" ? "ai" : ""}"></span></div>`).join("")}
     <div class="layer frame"><span class="ico">#</span>Mobile — Landing</div>
     <div class="legend"><div><span class="ai"></span>Drafted by Strata, in pencil</div><div><span></span>Inked by a person</div></div>`;
 }
@@ -104,8 +104,11 @@ function slotArt(k, h = 208) {
 function renderCanvas() {
   const E = S.elements, h = E.hero_heading.props, sub = E.hero_subcopy.props, b = E.cta_button.props;
   const t = ui.tab === "shop" && ui.tryOn && assetOf(ui.tryOn), spot = spotKey();
-  const tryIcons = t && t.kind === "icon_set" && spot === "feature_row" ? t : null;
-  const tryBg = t && t.kind === "pattern" && spot === "hero_background" ? t : null;
+  const tryFor = (k, kind) => (t && t.kind === kind && spot === k ? t : null);
+  const tryIcons = tryFor("feature_row", "icon_set"), tryBg = tryFor("hero_background", "pattern");
+  const tryFi = tryFor("footer_icons", "icon_set"), tryFb = tryFor("footer_background", "pattern");
+  const fIcons = tryFi ? tryFi.id : E.footer_icons.props.asset_id, fBg = tryFb ? tryFb.id : E.footer_background.props.asset_id;
+  const tryTag = (x, k) => (x ? `<span class="lic-tag try-tag">trying on · ${esc(x.title)}</span>` : issueTag(k));
   const icons = tryIcons ? tryIcons.id : E.feature_row.props.asset_id;
   const bg = tryBg ? tryBg.id : E.hero_background.props.asset_id;
   const locked = E.hero_heading.locked_props.includes("color") && E.hero_heading.locked_by;
@@ -125,6 +128,10 @@ function renderCanvas() {
       <div ${elAttrs(E.feature_row)}>${tryIcons ? `<span class="lic-tag try-tag">trying on · ${esc(tryIcons.title)}</span>` : issueTag("feature_row")}<div class="s-features ${tryIcons ? "trying" : ""}">${E.feature_row.props.items.map(([t1, d]) => `<div class="s-feat">${icons ? `<img src="/assets/${esc(icons)}.png" alt="">` : ""}<b>${esc(t1)}</b><span>${esc(d)}</span></div>`).join("")}</div></div>
       <div class="s-goals"><div><b>Set a goal. Watch it grow.</b><span>Pick a target and Tally rounds up toward it, a few cents at a time.</span></div>
         <div ${elAttrs(E.goals_illustration)}>${slotArt("goals_illustration", 128)}${issueTag("goals_illustration")}</div></div>
+      <div ${elAttrs(E.footer_background)} style="border-radius:0">${tryTag(tryFb, "footer_background")}<div class="s-footer ${tryFb ? "trying" : ""}" style="${fBg ? `background-image:url(/assets/${esc(fBg)}.png);background-size:200px` : ""}">
+        <div class="s-flogo">tally.<span>Savings that wait for you.</span></div>
+        <div ${elAttrs(E.footer_icons)}>${tryTag(tryFi, "footer_icons")}<div class="s-apps ${tryFi ? "trying" : ""}">${["App Store", "Google Play", "Help"].map((x) => `<span>${fIcons ? `<img src="/assets/${esc(fIcons)}.png" alt="">` : `<i class="dash"></i>`}${x}</span>`).join("")}</div></div>
+        <div class="s-flinks">Privacy · Terms · Contact</div></div></div>
     </div>
     ${locked ? `<div class="note">keep the navy. it's the brand, not a mood. — ${esc(locked[0])}.</div>` : ""}`;
   document.querySelectorAll("#canvas h1.el, #canvas p.el").forEach((n) => { n.style.margin = n.tagName === "H1" ? "0 0 18px" : "0 0 22px"; });
@@ -152,7 +159,8 @@ function renderHistory() {
   const people = new Set(hs.filter((h) => h.actor === "human").map((h) => h.author));
   const conflicts = S.conflicts.filter((c) => c.element_key === e.key && (c.status === "open" || c.status === "asked"));
   const lock = e.locked_props.length ? `<div class="lockline"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="5.5" width="8" height="5.5" rx="1"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5"/></svg>${cap(e.locked_props.map(propName).join(", "))} locked by ${esc(e.locked_by)}${e.props.color ? ` · <span class="swatch" style="background:${esc(e.props.color)}"></span>` : ""}</div>` : "";
-  return `<div class="label">Provenance</div><h2>${esc(e.name)}</h2>
+  const shopBtn = shoppable(e.key) ? `<button class="btn ai shop-this" data-swap="${e.key}">Shop for this ${esc(e.name.toLowerCase())}</button>` : "";
+  return `<div class="label">Provenance</div><h2>${esc(e.name)}</h2>${shopBtn}
     <p class="sub">${hs.length ? `${hs.length} change${hs.length === 1 ? "" : "s"}${people.size ? ` by ${people.size} ${people.size === 1 ? "person" : "people"}` : ""}${hs.some((h) => h.actor === "ai") ? ` · ${hs.filter((h) => h.actor === "ai").length} drafted by Strata` : ""}` : "No changes yet"}</p>
     ${lock}${conflicts.map(conflictCard).join("")}
     <ul class="tl">${hs.map((h) => {
@@ -176,7 +184,9 @@ function renderShop() {
   const chosen = ui.tryOn && assetOf(ui.tryOn);
   const price = chosen ? chosen.prices[ui.licence] : 0;
   const kindWord = { illustration: "illustrations", icon_set: "icon sets", pattern: "patterns" }[SHOP[el.kind]];
-  let html = `<div class="label">Asset shop</div><h2 class="shop-for">For the <select data-shopfor aria-label="Element to shop for">${els().filter((e) => shoppable(e.key)).map((e) => `<option value="${e.key}" ${e.key === spot ? "selected" : ""}>${esc(e.name.toLowerCase())}</option>`).join("")}</select></h2>
+  let html = `<div class="label">Asset shop · pick what you're shopping for</div>
+    <div class="spots" role="tablist" aria-label="Element to shop for">${els().filter((e) => shoppable(e.key)).map((e) => `<button class="spot ${e.key === spot ? "on" : ""}" data-spot="${e.key}" role="tab" aria-selected="${e.key === spot}">${esc(e.name)}</button>`).join("")}</div>
+    <h2>For the ${esc(el.name.toLowerCase())}</h2>
     <p class="sub">Strata ranks ${kindWord} by what your team keeps and undoes. Click one to try it on the page. Nothing is bought yet.</p>
     <div class="controls"><div class="seg">${["personal", "commercial", "extended"].map((l) => `<button class="${ui.licence === l ? "on" : ""}" data-lic="${l}">${l[0].toUpperCase() + l.slice(1)}</button>`).join("")}</div>
       <span class="budget">up to $<input data-budget value="${esc(ui.budget)}" inputmode="numeric" aria-label="Budget in dollars"></span>
@@ -431,7 +441,7 @@ const newCart = (body) => act(async () => { const c = await api("/api/cart", { m
 const openShop = (k) => { ui.review = null; ui.tab = "shop"; ui.sel = k || "hero_illustration"; ui.tryOn = null; render(); };
 
 document.addEventListener("click", (ev) => {
-  const t = ev.target.closest("[data-sel],[data-tab],[data-me],[data-act],[data-try],[data-lic],[data-judge],[data-conf],[data-upgrade],[data-swap],[data-licid]");
+  const t = ev.target.closest("[data-sel],[data-tab],[data-me],[data-act],[data-try],[data-lic],[data-judge],[data-conf],[data-upgrade],[data-swap],[data-licid],[data-spot]");
   if (!t) return;
   const d = t.dataset;
   if (d.sel) { if (ui.tab === "shop" && shoppable(d.sel) && d.sel !== ui.sel) ui.tryOn = null; ui.sel = d.sel; if (ui.tab === "shop" && !shoppable(d.sel)) ui.tab = "history"; ui.tryOn = ui.tab === "shop" ? ui.tryOn : null; if (ui.review && S.carts[ui.review]?.element_key !== d.sel) ui.review = null; return render(); }
@@ -441,11 +451,12 @@ document.addEventListener("click", (ev) => {
   if (d.lic) { ui.licence = d.lic; return render(); }
   if (d.licid) { ui.licView = d.licid; return render(); }
   if (d.swap) return openShop(d.swap);
+  if (d.spot) { ui.sel = d.spot; ui.tryOn = null; return render(); }
   if (d.judge) return act(() => api(`/api/history/${d.judge}/${d.v}`, { member: ui.me }));
   if (d.conf) return act(() => api(`/api/conflicts/${d.conf}`, { member: ui.me, choice: d.choice }));
   if (d.upgrade) return newCart({ asset_id: d.asset, licence: "commercial", element_key: d.el, upgrade_of: d.upgrade });
   switch (d.act) {
-    case "shop": return openShop();
+    case "shop": return openShop(shoppable(ui.sel) ? ui.sel : undefined);
     case "auth": ui.showAuth = t.checked; return render();
     case "catch": ui.catchOpen = !ui.catchOpen; return render();
     case "seen": ui.catchOpen = false; return act(() => api("/api/seen", { member: ui.me }));

@@ -3,7 +3,7 @@
     uv run python demo/server.py            # in one terminal
     uv run python scripts/prepare_demo.py   # in another, ~1-2 min
 
-Pre-runs: Alex's shortlist for the hero illustration and Priya's catch-up. The heading conflict is left for
+Pre-runs: Alex's shortlists for the hero illustration and footer icons, and Priya's catch-up. The heading conflict is left for
 you to run live on camera. On success the state is saved to demo/demo_snapshot.json (real CREAO results);
 if a venue network blocks CREAO later, `prepare_demo.py --restore` brings that state back instantly.
 """
@@ -34,6 +34,8 @@ def main() -> None:
     jobs = [
         ("curate", {"member": "Alex", "spot_key": "hero_illustration", "licence": "commercial",
                     "budget_cents": 4000, "request": "Art for the hero: something about saving that grows"}),
+        ("curate", {"member": "Alex", "spot_key": "footer_icons", "licence": "commercial",
+                    "budget_cents": 4000, "request": "Small app-store icons for the footer"}),
         ("catchup", {"member": "Priya"}),
     ]
     for kind, body in jobs:
