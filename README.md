@@ -21,6 +21,7 @@ Paper "Best Designed Hack" · CREAO "AI-First Disruptor" · main track: Applied 
 | `design/assets/` | Original illustrations and icon sets sold in the demo catalog (drawn by us) |
 | `base44/BASE44_BRIEF.md` | The step-by-step prompts used to build the app in Base44, plus submission text |
 | `base44/entities/` | Entity schemas for the Base44 app |
+| `demo/` | The working app: workspace, Provenance Lens, AI teammate, Try-on Shop, checkout, licences (FastAPI + one page) |
 | `base44/CREAO_BRIEF.md` | The three CREAO agents (Curator, Teammate, Catch-up): specs, setup, wiring |
 | `base44/functions/runAgent.ts`, `creaoWebhook.ts` | Base44 functions that start CREAO runs and receive their results |
 | `scripts/run_creao.py` | Start a CREAO agent run from the command line |
@@ -39,10 +40,22 @@ Paper "Best Designed Hack" · CREAO "AI-First Disruptor" · main track: Applied 
 | Licences and export guard | Each licence tied to its elements; personal-use assets flagged before client export |
 | Team rules | What Strata learned, who taught it, team vs personal vs split |
 
+## Run it
+
+```bash
+uv sync
+uv run python demo/server.py      # → http://localhost:8044
+```
+
+Put the CREAO agent IDs and API keys in `.env` (see `.env.example`). With `STRIPE_SECRET_KEY=sk_test_...` the
+checkout goes through Stripe test mode (Visa test card `4242 4242 4242 4242`); without it the payment step is
+a clearly labelled simulation.
+
 ## CREAO agents
 
-The AI in Strata is three CREAO agents. Base44 holds the UI, data and payments; the agents do the reasoning
-and write their results back into Base44, which the app shows live.
+The AI in Strata is three CREAO agents. The app holds the UI, data and payments; for every AI step it sends
+the agent the context (team rules, history, catalog, spending limit) through CREAO's API trigger, and applies
+the agent's JSON reply: a ranked shortlist, an edit with its reason, a conflict card, or a catch-up.
 
 | Agent | Agent ID | What it does |
 | --- | --- | --- |
@@ -56,7 +69,7 @@ Remove the agents and Strata stops working: the shop has no shortlist, the AI ca
 nobody gets caught up.
 
 ```
-Base44 UI → runAgent → CREAO API trigger → agent reads/writes Base44 entities → creaoWebhook → live UI
+Strata UI → server → CREAO API trigger {request, context_json} → agent run → JSON reply → applied → live UI
 ```
 
 ## Design language

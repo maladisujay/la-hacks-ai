@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 agent1*_data.json
+
+demo/state.json
+.DS_Store
