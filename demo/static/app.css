@@ -246,3 +246,53 @@ button:focus-visible, input:focus-visible, [data-sel]:focus-visible, [data-try]:
 .ainote .sum { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .lic-tag.try-tag { border-style: solid; color: var(--ink); background: #FFFCE6; }
 .s-features.trying { outline: 1.5px solid #C9B63A; outline-offset: -1px; }
+
+/* Simulated Visa checkout: the network's own surface, visibly separate from Strata's drafting-table UI */
+#sheet { position: fixed; inset: 0; display: none; z-index: 30; background: rgba(20, 23, 60, .28); }
+#sheet.on { display: grid; place-items: center; }
+.vx { --vb: #1A1F71; --vg: #F7B600; width: 440px; max-height: 92vh; overflow: auto; background: #fff; color: #1B1D2A; border-radius: 14px; border-top: 4px solid var(--vg); font: 400 14px/1.45 var(--ui); }
+.vx-top { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #E6E7EF; }
+.vx-brand { font-weight: 800; font-style: italic; letter-spacing: .02em; color: var(--vb); font-size: 20px; }
+.vx-title { font-weight: 600; }
+.vx-sim { font-family: var(--mono); font-size: 12px; color: #5B5F73; border: 1px solid #D5D7E2; border-radius: 4px; padding: 0 6px; }
+.vx-x { margin-left: auto; border: 0; background: none; font-size: 22px; color: #5B5F73; }
+.vx-merchant { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; }
+.vx-merchant span { display: block; color: #5B5F73; font-size: 12.5px; }
+.vx-amt { font-family: var(--mono); font-size: 24px; color: var(--vb); }
+.vx-sec { padding: 12px 20px; border-top: 1px solid #EEEFF4; }
+.vx-row { display: flex; justify-content: space-between; font-size: 13.5px; padding: 2px 0; }
+.vx-total { font-weight: 600; border-top: 1px dashed #D5D7E2; margin-top: 6px; padding-top: 6px; }
+.vx-pay { display: grid; grid-template-columns: 170px 1fr; gap: 14px; align-items: center; }
+.vx-card { position: relative; height: 106px; border-radius: 10px; background: var(--vb); color: #fff; padding: 10px 12px; }
+.vx-cb { position: absolute; right: 12px; bottom: 8px; font-weight: 800; font-style: italic; font-size: 20px; }
+.vx-cp { font-size: 12px; opacity: .85; }
+.vx-cn { position: absolute; left: 12px; top: 36px; font-family: var(--mono); font-size: 14px; letter-spacing: .08em; }
+.vx-ch { position: absolute; left: 12px; bottom: 10px; font-size: 12px; letter-spacing: .06em; }
+.vx-ce { position: absolute; left: 12px; top: 58px; font-family: var(--mono); font-size: 12px; opacity: .85; }
+.vx-k { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #5B5F73; margin-bottom: 6px; }
+.vx-m { font-size: 12.5px; color: #3F4357; }
+.vx-ctl { display: flex; gap: 10px; font-size: 13.5px; padding: 3px 0; }
+.vx-ctl span { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: #E3F2E6; color: #2E6B3A; flex-shrink: 0; }
+.vx-ctl.bad span { background: #FBE9D0; color: #8A5300; }
+.vx-ctl i { display: block; font-style: normal; color: #5B5F73; font-size: 12px; }
+.vx-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: calc(100% - 40px); margin: 14px 20px 6px; padding: 12px; border: 0; border-radius: 8px; background: var(--vb); color: #fff; font-weight: 600; font-size: 15px; }
+.vx-btn:hover { background: #12165A; }
+.vx-btn.ghost { background: #fff; color: var(--vb); border: 1px solid var(--vb); }
+.vx-foot { text-align: center; font-size: 12px; color: #5B5F73; padding: 0 20px 16px; }
+.vx-steps { list-style: none; margin: 0; padding: 12px 20px; }
+.vx-steps li { display: flex; gap: 10px; padding: 6px 0; font-size: 13.5px; }
+.vx-steps li span { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; flex-shrink: 0; background: #E3F2E6; color: #2E6B3A; }
+.vx-steps li.bad span { background: #FBE9D0; color: #8A5300; }
+.vx-steps li.wait span { background: #EEEFF4; color: #5B5F73; }
+.vx-steps li i { display: block; font-style: normal; font-size: 12px; color: #5B5F73; }
+.vx-ok, .vx-bad { padding: 6px 20px 16px; border-top: 1px solid #EEEFF4; }
+.vx-ok .vx-btn, .vx-bad .vx-btn { width: 100%; margin: 14px 0 0; }
+.vx-big { font-size: 20px; font-weight: 700; color: #2E6B3A; margin: 8px 0; }
+.vx-bad .vx-big { color: #8A5300; }
+.vx-grid { display: grid; grid-template-columns: 120px 1fr; gap: 4px 10px; font-size: 13px; }
+.vx-grid span { color: #5B5F73; }
+.s-hero.trying { outline: 1.5px solid #C9B63A; outline-offset: -2px; }
+.s-goals { display: grid; grid-template-columns: 1fr 180px; gap: 24px; align-items: center; margin: 0 28px 28px; padding: 20px 24px; background: #F4F7FB; border-radius: 10px; }
+.s-goals b { display: block; font-family: var(--s-display); font-size: 20px; letter-spacing: -.02em; margin-bottom: 6px; }
+.s-goals span { font-size: 13.5px; color: #4A5672; }
+.shop-for select { font: inherit; color: inherit; border: 0; border-bottom: 1.5px dashed var(--control); background: none; padding: 0 2px; cursor: pointer; }

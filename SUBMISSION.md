@@ -28,21 +28,27 @@ Strata is a shared design workspace with one AI teammate that lives in the file.
 - **Catch me up:** a summary of what teammates and the AI changed since you last looked.
 
 ## Visa · The Future of Shopping
-- **Discovery and personalization:** recommendations come from what this team keeps and undoes, and every pick
-  names the rule and the teammates it was learned from.
-- **Decision-making:** try-on on your own design, three license tiers explained in one line each.
-- **Checkout and payments:** a review step is required; per-person spending limits and allowed tiers are checked
-  when the cart is made and again at payment; over-limit purchases need the lead's approval. Payment is a
-  **simulated Visa authorization** on the team's tokenized card (Visa told teams to simulate; no sandbox was
-  offered). Double-submits are idempotent.
-- **Post-purchase:** licenses are tied to elements, the export guard prevents misuse, upgrades are priced as the
-  difference.
-- **Trust and responsibility:** nothing is charged without review or above a limit; the paper trail
-  (intent → cart → payment → receipt) is visible; **the AI agents never receive card data** (only rules,
-  catalog and limits); every AI recommendation and edit carries its reason; the AI can't override a person's
-  locked decision.
-- **Commerce impact:** buyers see the asset in context before paying (fewer refunds, more confident purchases);
-  creators get sales from inside the tool where the decision happens; teams stop shipping unlicensed assets.
+Strata's checkout simulates **Visa Intelligent Commerce** end to end (Visa offered no sandbox and asked teams to
+simulate):
+- **Discovery and personalization:** CREAO ranks illustrations, icon sets and background patterns for whichever
+  element you're working on, by what this team keeps and undoes; every pick names the rule and who taught it.
+- **Decision-making:** try any asset on the real page (hero art, background, icons, section art), compare three
+  license tiers, see your remaining limit before you commit.
+- **Checkout:** a Visa checkout sheet shows the merchant, order, card, and the **agent token** Strata pays with
+  (created by the lead with a Visa Payment Passkey) plus its **spend controls**: monthly limit, allowed license
+  tiers, design assets only, expiry. Over a control, the lead approves that one purchase.
+- **Payments:** the buyer confirms with a **passkey**; the merchant verifies Strata's **signed agent intent**
+  (Trusted Agent Protocol); the agent token is used with a one-time cryptogram; risk check; issuer response `00`
+  with auth code and Visa transaction ID. Spend controls are re-checked at authorization and decline with real
+  response codes (`61` exceeds spend control, `57` not permitted, `54` expired instruction). Double-submits are
+  idempotent.
+- **Post-purchase:** each license is tied to the elements it covers, with an export guard for client work and
+  one-click upgrades priced as the difference.
+- **Trust and responsibility:** nothing is charged without review and a passkey; the AI agents never receive card
+  data (a "What Strata saw" box lists exactly what each agent was sent); every recommendation and edit carries its
+  reason; the AI can't override a teammate's locked decision.
+- **Commerce impact:** buyers see the asset in context before paying (more confident purchases, fewer refunds);
+  creators sell inside the tool where the decision happens; teams stop shipping unlicensed assets.
 
 ## CREAO · AI-First Disruptor
 Every AI step in Strata runs on one CREAO agent with three skills, called through CREAO's API trigger with

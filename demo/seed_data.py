@@ -26,6 +26,7 @@ EDITABLE = {
     "nav": {"text": "string"},
     "illustration_slot": {},
     "icon_row": {},
+    "pattern_slot": {},
 }
 
 CATALOG = [
@@ -40,6 +41,14 @@ CATALOG = [
      "prices": {"personal": 1900, "commercial": 3800, "extended": 8000}},
     {"id": "coin-stack", "title": "Coin stack", "creator": "Ines Ward", "kind": "illustration", "style": "flat",
      "colours": 3, "palette": ["navy", "mint", "gold"], "prices": {"personal": 1100, "commercial": 2200, "extended": 5000}},
+    {"id": "goal-flag", "title": "Goal pig", "creator": "Hollis Ink", "kind": "illustration", "style": "flat",
+     "colours": 2, "palette": ["navy", "sage"], "prices": {"personal": 1000, "commercial": 2000, "extended": 4800}},
+    {"id": "soft-dots", "title": "Soft dots", "creator": "Field Notes Co", "kind": "pattern", "style": "soft",
+     "colours": 1, "palette": ["navy"], "prices": {"personal": 500, "commercial": 1000, "extended": 2500}},
+    {"id": "quiet-waves", "title": "Quiet waves", "creator": "Studio Pilcrow", "kind": "pattern", "style": "line",
+     "colours": 2, "palette": ["navy", "sage"], "prices": {"personal": 700, "commercial": 1400, "extended": 3000}},
+    {"id": "coin-grid", "title": "Coin grid", "creator": "Kettle & Co", "kind": "pattern", "style": "busy",
+     "colours": 3, "palette": ["navy", "mint", "gold"], "prices": {"personal": 600, "commercial": 1200, "extended": 2800}},
     {"id": "tiny-coins", "title": "Tiny coins", "creator": "Penny Studio", "kind": "icon_set", "style": "line",
      "colours": 1, "palette": ["navy"], "prices": {"personal": 400, "commercial": 1200, "extended": 2400}},
     {"id": "soft-circles", "title": "Soft circles", "creator": "Penny Studio", "kind": "icon_set", "style": "flat",
@@ -48,9 +57,12 @@ CATALOG = [
 
 
 def payment_method() -> dict:
-    """The team's card on file. Only the server's checkout reads it; it never goes into agent context."""
-    return {"brand": "Visa", "last4": "4242", "holder": "Tally design · held by Priya",
-            "token": "vtok_" + secrets.token_hex(8)}
+    """The team's card on file, as Visa Intelligent Commerce would hold it: the card is tokenized and Strata gets its
+    own agent token with spend controls. Only the checkout reads this; it never goes into agent context."""
+    return {"brand": "Visa", "product": "Visa Signature Business", "last4": "4242", "holder": "Tally design",
+            "expiry": "09/29", "token": "vtok_" + secrets.token_hex(8),
+            "agent_token": {"last4": "8841", "bound_to": "Strata", "merchant_category": "Digital goods · design assets",
+                            "created_by": "Priya", "created_with": "Visa Payment Passkey", "created": "Oct 12"}}
 
 
 def seed() -> dict:
@@ -74,6 +86,12 @@ def seed() -> dict:
                               "kind": "illustration_slot", "order": 4, "props": {"asset_id": None},
                               "locked_props": [], "locked_by": None, "authorship": "ai",
                               "last_author": "Strata (pencil draft)"},
+        "hero_background": {"key": "hero_background", "name": "Hero background", "kind": "pattern_slot", "order": 4.5,
+                            "props": {"asset_id": None}, "locked_props": [], "locked_by": None,
+                            "authorship": "human", "last_author": "Priya"},
+        "goals_illustration": {"key": "goals_illustration", "name": "Goals illustration", "kind": "illustration_slot",
+                               "order": 6, "props": {"asset_id": None}, "locked_props": [], "locked_by": None,
+                               "authorship": "ai", "last_author": "Strata (pencil draft)"},
         "feature_row": {"key": "feature_row", "name": "Feature row", "kind": "icon_row", "order": 5,
                         "props": {"asset_id": "tiny-coins",
                                   "items": [["Round-ups", "Spare change, quietly saved."],
@@ -106,6 +124,12 @@ def seed() -> dict:
          "on_behalf_of": None, "summary": "Set up the nav: Savings, Cards, Pricing", "at": _ago(days=6, minutes=5)},
         {"id": "h10", "element_key": "cta_button", "kind": "edit", "actor": "human", "author": "Priya",
          "on_behalf_of": None, "summary": "Button colour → mint, copy “Open an account”", "at": _ago(days=2)},
+        {"id": "h11", "element_key": "hero_background", "kind": "edit", "actor": "human", "author": "Priya",
+         "on_behalf_of": None, "summary": "Plain mint background, pattern to come", "at": _ago(days=2, hours=1)},
+        {"id": "h12", "element_key": "goals_illustration", "kind": "edit", "actor": "ai", "author": "Strata",
+         "on_behalf_of": "Sam", "summary": "Drew a pencil placeholder for the goals card",
+         "ai_reason": "Sam added the goals section; it needs a small picture next to the copy.",
+         "status": "kept", "rule_ids": [], "at": _ago(hours=4)},
         {"id": "h8", "element_key": "hero_illustration", "kind": "edit", "actor": "ai", "author": "Strata",
          "on_behalf_of": "Priya", "summary": "Drew a pencil placeholder for the hero art",
          "ai_reason": "The hero needs a picture; I left a draft until someone picks real art.",
@@ -113,14 +137,17 @@ def seed() -> dict:
     ]
     rules = [
         {"id": "r-navy", "text": "Headings stay navy", "scope": "team", "members": ["Priya", "Sam"],
-         "kept": 7, "undone": 0, "pinned": True, "requires": {"palette_includes": "navy"}},
+         "kept": 7, "undone": 0, "pinned": True, "requires": {"palette_includes": "navy"},
+         "applies_to": ["heading", "illustration", "icon_set", "pattern"]},
         {"id": "r-flat-2c", "text": "Illustrations are flat, two colours", "scope": "team",
          "members": ["Priya", "Sam"], "kept": 4, "undone": 1, "pinned": False,
-         "requires": {"style": "flat", "max_colours": 2}},
+         "requires": {"style": "flat", "max_colours": 2}, "applies_to": ["illustration"]},
+        {"id": "r-quiet-bg", "text": "Backgrounds stay quiet, one colour", "scope": "team", "members": ["Priya", "Sam"],
+         "kept": 3, "undone": 0, "pinned": False, "requires": {"max_colours": 1}, "applies_to": ["pattern"]},
         {"id": "r-heavy", "text": "Heavier headings, weight 600+", "scope": "personal", "members": ["Alex"],
-         "kept": 3, "undone": 0, "pinned": False, "requires": {}},
+         "kept": 3, "undone": 0, "pinned": False, "requires": {}, "applies_to": ["heading"]},
         {"id": "r-warm", "text": "Warmer page tints?", "scope": "split", "members": ["Alex", "Priya"],
-         "kept": 3, "undone": 3, "pinned": False, "requires": {}},
+         "kept": 3, "undone": 3, "pinned": False, "requires": {}, "applies_to": ["pattern"]},
     ]
     return {
         "file": {"slug": "fintech-landing", "name": "Fintech landing", "version": 14, "client_work": True},

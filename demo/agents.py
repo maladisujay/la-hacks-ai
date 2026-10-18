@@ -70,7 +70,9 @@ NEEDS = {"curate": "shortlist", "teammate": "action", "catchup": "lines"}
 
 def contract(kind: str, request: str) -> str:
     """Appended to every request: the app reads this exact JSON, whatever the agent's report style."""
-    return (f"{request}\n\nOUTPUT CONTRACT (the Strata app parses this): end your reply with exactly one JSON "
+    extra = (" Only score a rule against an asset if the rule's applies_to list includes spot.kind (rules with an "
+             "empty applies_to apply to everything)." if kind == "curate" else "")
+    return (f"{request}{extra}\n\nOUTPUT CONTRACT (the Strata app parses this): end your reply with exactly one JSON "
             f"object in this shape, every field filled, inside a ```json block, and also save it as result.json: "
             f"{SHAPE[kind]}").strip()
 
@@ -216,7 +218,7 @@ def offline_curate(request: str, ctx: dict) -> dict:
             continue
         score, fits, breaks = 0.0, [], []
         for rule in ctx["rules"]:
-            if not _applies(rule, member):
+            if not _applies(rule, member) or (rule.get("applies_to") and a["kind"] not in rule["applies_to"]):
                 continue
             ok = _satisfies(rule.get("requires") or {}, a)
             if ok is None:
@@ -226,7 +228,7 @@ def offline_curate(request: str, ctx: dict) -> dict:
         price = a["prices"][lic]
         if price > ctx["budget_cents"] or price > left or lic not in m["allowed_licences"]:
             score -= 1.5
-            breaks.append("over your limit")
+            breaks.append("Over your limit")
         rows.append((score, price, a, fits, breaks))
     rows.sort(key=lambda r: (-r[0], r[1]))
     out = []

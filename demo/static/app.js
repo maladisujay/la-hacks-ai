@@ -77,7 +77,7 @@ function renderTop() {
 }
 
 // ---------------------------------------------------------------- layers
-const ICON = { nav: "▭", heading: "T", text: "¶", button: "▭", illustration_slot: "◫", icon_row: "▭" };
+const ICON = { nav: "▭", heading: "T", text: "¶", button: "▭", illustration_slot: "◫", icon_row: "▭", pattern_slot: "▦" };
 function renderRail() {
   $("#rail").innerHTML = `<div class="label">Layers</div>
     <div class="layer frame"><span class="ico">#</span>Desktop — Landing</div>
@@ -92,32 +92,39 @@ function elAttrs(e) {
   return `class="el ${e.authorship} ${e.key === ui.sel ? "sel" : ""} ${bad ? "lic-issue" : ""}" data-sel="${e.key}" tabindex="0" role="button" aria-label="${esc(e.name)}"`;
 }
 const issueTag = (k) => { const i = issueOf(k); return i ? `<span class="lic-tag">${i.licence_id ? "personal license" : "no license"}</span>` : ""; };
+const SHOP = { illustration_slot: "illustration", icon_row: "icon_set", pattern_slot: "pattern" };
+const shoppable = (k) => !!SHOP[S.elements[k]?.kind];
+function slotArt(k, h = 208) {
+  const e = S.elements[k], spot = spotKey(), t = ui.tryOn && assetOf(ui.tryOn), trying = ui.tab === "shop" && spot === k && t && t.kind === "illustration" ? t : null;
+  const placed = e.props.asset_id, lic = placed && S.licences.find((l) => l.status === "active" && l.asset_id === placed && l.element_keys.includes(k));
+  if (trying) return `<div class="slot try" style="height:${h}px"><span class="tag" style="color:var(--ink)">trying on · ${esc(trying.title)}</span><img src="/assets/${esc(trying.id)}.png" alt=""><div class="watermark">PREVIEW · STRATA · PREVIEW</div></div>`;
+  if (placed) return `<div class="slot placed" style="height:${h}px">${lic ? `<span class="tag" style="color:var(--ink)">licensed · ${esc(assetOf(placed)?.title)}</span>` : ""}<img src="/assets/${esc(placed)}.png" alt="${esc(assetOf(placed)?.title)}"></div>`;
+  return `<div class="slot draft" style="height:${h}px"><span class="tag">pencil draft</span><svg width="120" height="80" viewBox="0 0 140 90" fill="none" stroke="#6A90B8" stroke-width="1.5" stroke-dasharray="4 4"><circle cx="100" cy="22" r="12"/><path d="M6 72c18-10 28-22 44-12s26 8 40-6 26-16 44-20"/><path d="M6 84h128" stroke-dasharray="0"/></svg></div>`;
+}
 function renderCanvas() {
   const E = S.elements, h = E.hero_heading.props, sub = E.hero_subcopy.props, b = E.cta_button.props;
-  const slot = E.hero_illustration, placed = slot.props.asset_id, tryAny = ui.tryOn && assetOf(ui.tryOn);
-  const tryAsset = tryAny && tryAny.kind !== "icon_set" ? tryAny : null, tryIcons = tryAny && tryAny.kind === "icon_set" ? tryAny : null;
-  let slotHtml;
-  if (tryAsset) slotHtml = `<div class="slot try"><span class="tag" style="color:var(--ink)">trying on · ${esc(tryAsset.title)}</span><img src="/assets/${tryAsset.id}.png" alt=""><div class="watermark">PREVIEW · STRATA · PREVIEW</div></div>`;
-  else if (placed) {
-    const lic = S.licences.find((l) => l.status === "active" && l.asset_id === placed && l.element_keys.includes("hero_illustration"));
-    slotHtml = `<div class="slot placed">${lic ? `<span class="tag" style="color:var(--ink)">licensed · ${esc(assetOf(placed)?.title)}</span>` : ""}<img src="/assets/${esc(placed)}.png" alt="${esc(assetOf(placed)?.title)}"></div>`;
-  }
-  else slotHtml = `<div class="slot draft"><span class="tag">pencil draft</span><svg width="140" height="90" viewBox="0 0 140 90" fill="none" stroke="#6A90B8" stroke-width="1.5" stroke-dasharray="4 4"><circle cx="100" cy="22" r="12"/><path d="M6 72c18-10 28-22 44-12s26 8 40-6 26-16 44-20"/><path d="M6 84h128" stroke-dasharray="0"/></svg></div>`;
+  const t = ui.tab === "shop" && ui.tryOn && assetOf(ui.tryOn), spot = spotKey();
+  const tryIcons = t && t.kind === "icon_set" && spot === "feature_row" ? t : null;
+  const tryBg = t && t.kind === "pattern" && spot === "hero_background" ? t : null;
   const icons = tryIcons ? tryIcons.id : E.feature_row.props.asset_id;
+  const bg = tryBg ? tryBg.id : E.hero_background.props.asset_id;
   const locked = E.hero_heading.locked_props.includes("color") && E.hero_heading.locked_by;
+  const bgTag = tryBg ? `<span class="lic-tag try-tag">trying on · ${esc(tryBg.title)}</span>` : issueTag("hero_background");
   $("#canvas").innerHTML = `
     <div class="frame-label">Desktop — Landing · 1280 <label><input type="checkbox" data-act="auth" aria-label="Show who made what" ${ui.showAuth ? "checked" : ""}> Show who made what</label></div>
     <div class="sample ${ui.showAuth ? "auth" : ""}">
       <div ${elAttrs(E.nav)}><div class="s-nav"><div class="s-logo">${esc(E.nav.props.text)}</div><div class="s-links">${E.nav.props.links.map((l) => `<span>${esc(l)}</span>`).join("")}</div></div></div>
-      <div class="s-hero">
+      <div ${elAttrs(E.hero_background)} style="border-radius:0">${bgTag}<div class="s-hero ${tryBg ? "trying" : ""}" style="${bg ? `background-image:url(/assets/${esc(bg)}.png);background-size:240px` : ""}">
         <div>
           <h1 ${elAttrs(E.hero_heading)} style="color:${esc(h.color)};font-size:${+h.font_size}px;font-weight:${+h.font_weight}"><span class="s-h1" style="display:block;margin:0">${esc(h.text)}</span></h1>
           <p ${elAttrs(E.hero_subcopy)}><span class="s-sub" style="display:block;margin:0;color:${esc(sub.color)};font-size:${+sub.font_size}px">${esc(sub.text)}</span></p>
           <div ${elAttrs(E.cta_button)} style="display:inline-block"><span class="s-btn" style="background:${esc(b.bg)};color:${esc(b.color)}">${esc(b.text)}</span></div>
         </div>
-        <div ${elAttrs(slot)}>${slotHtml}${issueTag(slot.key)}</div>
-      </div>
-      <div ${elAttrs(E.feature_row)}>${tryIcons ? `<span class="lic-tag try-tag">trying on · ${esc(tryIcons.title)}</span>` : issueTag("feature_row")}<div class="s-features ${tryIcons ? "trying" : ""}">${E.feature_row.props.items.map(([t, d]) => `<div class="s-feat">${icons ? `<img src="/assets/${esc(icons)}.png" alt="">` : ""}<b>${esc(t)}</b><span>${esc(d)}</span></div>`).join("")}</div></div>
+        <div ${elAttrs(E.hero_illustration)}>${slotArt("hero_illustration")}${issueTag("hero_illustration")}</div>
+      </div></div>
+      <div ${elAttrs(E.feature_row)}>${tryIcons ? `<span class="lic-tag try-tag">trying on · ${esc(tryIcons.title)}</span>` : issueTag("feature_row")}<div class="s-features ${tryIcons ? "trying" : ""}">${E.feature_row.props.items.map(([t1, d]) => `<div class="s-feat">${icons ? `<img src="/assets/${esc(icons)}.png" alt="">` : ""}<b>${esc(t1)}</b><span>${esc(d)}</span></div>`).join("")}</div></div>
+      <div class="s-goals"><div><b>Set a goal. Watch it grow.</b><span>Pick a target and Tally rounds up toward it, a few cents at a time.</span></div>
+        <div ${elAttrs(E.goals_illustration)}>${slotArt("goals_illustration", 128)}${issueTag("goals_illustration")}</div></div>
     </div>
     ${locked ? `<div class="note">keep the navy. it's the brand, not a mood. — ${esc(locked[0])}.</div>` : ""}`;
   document.querySelectorAll("#canvas h1.el, #canvas p.el").forEach((n) => { n.style.margin = n.tagName === "H1" ? "0 0 18px" : "0 0 22px"; });
@@ -160,7 +167,7 @@ function renderHistory() {
     }).join("")}</ul>`;
 }
 
-function spotKey() { return S.elements[ui.sel]?.kind === "icon_row" ? "feature_row" : "hero_illustration"; }
+function spotKey() { return shoppable(ui.sel) ? ui.sel : "hero_illustration"; }
 function renderShop() {
   const spot = spotKey(), el = S.elements[spot];
   const sl = S.shortlists[`${ui.me}:${spot}`];
@@ -168,8 +175,9 @@ function renderShop() {
   const md = S.mandates[ui.me], left = md.limit_cents - md.spent_cents;
   const chosen = ui.tryOn && assetOf(ui.tryOn);
   const price = chosen ? chosen.prices[ui.licence] : 0;
-  let html = `<div class="label">Asset shop</div><h2>For the ${esc(el.name.toLowerCase())}</h2>
-    <p class="sub">Strata ranks the catalog by what your team keeps and undoes. Click one to try it on. Nothing is bought yet.</p>
+  const kindWord = { illustration: "illustrations", icon_set: "icon sets", pattern: "patterns" }[SHOP[el.kind]];
+  let html = `<div class="label">Asset shop</div><h2 class="shop-for">For the <select data-shopfor aria-label="Element to shop for">${els().filter((e) => shoppable(e.key)).map((e) => `<option value="${e.key}" ${e.key === spot ? "selected" : ""}>${esc(e.name.toLowerCase())}</option>`).join("")}</select></h2>
+    <p class="sub">Strata ranks ${kindWord} by what your team keeps and undoes. Click one to try it on the page. Nothing is bought yet.</p>
     <div class="controls"><div class="seg">${["personal", "commercial", "extended"].map((l) => `<button class="${ui.licence === l ? "on" : ""}" data-lic="${l}">${l[0].toUpperCase() + l.slice(1)}</button>`).join("")}</div>
       <span class="budget">up to $<input data-budget value="${esc(ui.budget)}" inputmode="numeric" aria-label="Budget in dollars"></span>
       <button class="btn ai" data-act="curate" ${busy(r) ? "disabled" : ""}>${sl ? "Re-rank with Strata" : "Ask Strata for a shortlist"}</button></div>
@@ -184,7 +192,7 @@ function renderShop() {
           <div class="w ${bad ? "bad" : ""}">${esc(i.why)}</div></div><div class="p">${money(a.prices[ui.licence])}</div></div>`;
       }).join("")}</div>`;
   } else if (!busy(r)) {
-    html += `<div class="card-ok" style="background:var(--sunken);color:var(--graphite)">No shortlist yet. Strata's Curator agent reads your team's rules, ${esc(ui.me)}'s spending limit and the catalog, then explains each pick.</div>`;
+    html += `<div class="card-ok" style="background:var(--sunken);color:var(--graphite)">No shortlist yet. Strata's CREAO agent reads your team's rules, ${esc(ui.me)}'s spending limit and the ${kindWord} in the catalog, then explains each pick.</div>`;
   }
   if (chosen) {
     const over = price > left || !md.allowed_licences.includes(ui.licence);
@@ -261,11 +269,13 @@ function renderReview() {
     <ul class="ptrail">${trailSteps(c).map((s) => `<li class="${s.st}"><span class="pt" aria-hidden="true">${s.st === "done" ? `<svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 4.6l2 2 4-4.4"/></svg>` : ""}</span><b>${esc(s.t)}</b><div>${esc(s.x)}</div></li>`).join("")}</ul>
     <button class="linkish back" data-act="back">← Back to shop</button>`;
   let foot;
-  if ((c.status === "ready" || c.status === "paying") && ui.me !== c.member) {
+  if (c.status === "paid") {
+    foot = `<button class="btn pay" data-act="see-license">Paid · see the license</button>`;
+  } else if ((c.status === "ready" || c.status === "paying") && ui.me !== c.member) {
     foot = `<button class="btn pay" disabled>Approved · ${esc(c.member)} can pay now</button>`;
   } else if (c.status === "ready" || c.status === "paying") {
     const going = ui.paying || c.status === "paying";
-    foot = `<button class="btn dark pay" data-act="pay" ${going ? "disabled" : ""}>${going ? "Authorizing with Visa (simulated)…" : `Pay ${money(c.amount_cents)}`}</button>`;
+    foot = `<button class="btn dark pay visa-go" data-act="visa" ${going ? "disabled" : ""}>${going ? "Authorizing with Visa (simulated)…" : `Continue to Visa checkout · ${money(c.amount_cents)}`}</button>`;
   } else if (ui.me === lead && c.member !== lead) {
     foot = `<button class="btn dark pay" data-act="approve">Approve ${money(c.amount_cents)} for ${esc(c.member)}</button>`;
   } else if (c.approval_requested) {
@@ -273,7 +283,7 @@ function renderReview() {
   } else {
     foot = `<button class="btn dark pay" data-act="ask-approval">Ask ${esc(lead)} to approve</button>`;
   }
-  return [body, `${foot}<div class="foot-note">Test mode · simulated Visa payment · nothing real is charged</div>`];
+  return [body, `${foot}<div class="foot-note">Simulated Visa Intelligent Commerce checkout · nothing real is charged</div>`];
 }
 
 function renderGuard() {
@@ -310,6 +320,34 @@ function renderPanel() {
   $("#ask-status").innerHTML = canEdit ? runLine(mine("teammate", (r) => r.element_key === ui.sel), "thinking about this " + e.name.toLowerCase()) : "";
 }
 
+// ---------------------------------------------------------------- Visa checkout (simulated Visa Intelligent Commerce)
+const FINGER = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 11v4.5c0 1.6.5 3 1.4 4.2"/><path d="M8.5 13.5v1.8c0 2.4.8 4.6 2.2 6.2"/><path d="M15.5 13v2c0 1.2.2 2.4.6 3.4"/><path d="M5.6 16.5c-.4-1.1-.6-2.3-.6-3.5a7 7 0 0 1 14 0v.5"/><path d="M7.5 6.2A7 7 0 0 1 17 6.8"/><path d="M12 11a1.5 1.5 0 0 1 1.5 1.5"/></svg>`;
+function renderVisa() {
+  const el = $("#sheet"), v = ui.visa;
+  if (!v) { el.className = ""; el.innerHTML = ""; return; }
+  const c = v.cart, co = c.checkout, card = v.card, tok = v.agent_token, total = co.lines.reduce((x, l) => x + l.cents, 0);
+  const head = `<div class="vx-top"><span class="vx-brand">VISA</span><span class="vx-title">Checkout</span><span class="vx-sim">simulated</span>${v.phase === "processing" ? "" : `<button class="vx-x" data-act="visa-close" aria-label="Close">×</button>`}</div>
+    <div class="vx-merchant"><div><b>${esc(co.merchant)}</b><span>Sold by ${esc(co.seller)} · for ${esc(S.file.name)}</span></div><div class="vx-amt">${money(total)}</div></div>`;
+  let body;
+  if (v.phase === "confirm") {
+    body = `<div class="vx-sec">${co.lines.map((l) => `<div class="vx-row"><span>${esc(l.label)}</span><span class="mono">${money(l.cents)}</span></div>`).join("")}<div class="vx-row vx-total"><span>Total</span><span class="mono">${money(total)}</span></div></div>
+      <div class="vx-sec vx-pay"><div class="vx-card" aria-label="Visa card ending ${esc(card.last4)}"><span class="vx-cb">VISA</span><span class="vx-cp">${esc(card.product)}</span><span class="vx-cn">•••• ${esc(card.last4)}</span><span class="vx-ch">${esc(card.holder.toUpperCase())}</span><span class="vx-ce">EXP ${esc(card.expiry)}</span></div>
+        <div class="vx-agent"><div class="vx-k">Paying through an AI agent</div><div><b>Strata</b> · agent token •••• ${esc(tok.last4)}</div><div class="vx-m">Created by ${esc(tok.created_by)} with ${esc(tok.created_with)} · ${esc(tok.created)}. The merchant and the agent never see the card number.</div></div></div>
+      <div class="vx-sec"><div class="vx-k">Spend controls on this agent token</div>${v.controls.map((x) => `<div class="vx-ctl ${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "!"}</span><div>${esc(x.label)}<i>${esc(x.detail)}</i></div></div>`).join("")}</div>
+      <div class="vx-sec"><div class="vx-k">Trusted agent intent</div><div class="vx-m">Strata signed: <b>${esc(co.intent.action)} ${esc(co.intent.item)}</b> for ${esc(co.intent.for)} at ${esc(co.merchant)} · <span class="mono">${esc(co.intent.signature)}</span> · valid ${co.intent.valid_minutes} min</div></div>
+      <button class="vx-btn" data-act="passkey">${FINGER}<span>Confirm ${money(total)} with passkey</span></button>
+      <div class="vx-foot">Simulated Visa Intelligent Commerce flow with test data · nothing real is charged</div>`;
+  } else {
+    const steps = (v.steps || []).slice(0, v.shown);
+    const done = v.phase === "approved", bad = v.phase === "declined";
+    body = `<ul class="vx-steps">${steps.map((x) => `<li class="${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "!"}</span><div><b>${esc(x.t)}</b>${x.x ? `<i>${esc(x.x)}</i>` : ""}</div></li>`).join("")}${v.phase === "processing" ? `<li class="wait"><span>…</span><div><b>${v.steps ? "Authorizing" : "Waiting for passkey"}</b></div></li>` : ""}</ul>
+      ${done ? `<div class="vx-ok"><div class="vx-big">Approved</div><div class="vx-grid"><span>Response</span><b class="mono">00 · Approved</b><span>Auth code</span><b class="mono">${esc(c.auth.auth_code)}</b><span>Visa transaction</span><b class="mono">${esc(c.auth.txn_id)}</b><span>Paid with</span><b class="mono">agent token •••• ${esc(c.auth.token_last4)} → Visa •••• ${esc(c.auth.card_last4)}</b></div><button class="vx-btn" data-act="visa-close"><span>Done · see the license</span></button></div>` : ""}
+      ${bad ? `<div class="vx-bad"><div class="vx-big">Declined</div><div>${esc(v.error || "")}</div><button class="vx-btn ghost" data-act="visa-close"><span>Back to review</span></button></div>` : ""}`;
+  }
+  el.className = "on";
+  el.innerHTML = `<div class="vx" role="dialog" aria-modal="true" aria-label="Visa checkout">${head}${body}</div>`;
+}
+
 // ---------------------------------------------------------------- catch-up popover
 function renderPop() {
   document.querySelector(".pop")?.remove();
@@ -336,7 +374,7 @@ function render() {
   if (!S) return;
   if (!S.elements[ui.sel]) ui.sel = "hero_heading";
   const fk = focusKey();
-  renderTop(); renderRail(); renderCanvas(); renderPanel(); renderPop();
+  renderTop(); renderRail(); renderCanvas(); renderPanel(); renderPop(); renderVisa();
   if (fk && (document.activeElement === document.body || !document.activeElement)) document.querySelector(fk)?.focus({ preventScroll: true });
 }
 
@@ -355,8 +393,8 @@ document.addEventListener("click", (ev) => {
   const t = ev.target.closest("[data-sel],[data-tab],[data-me],[data-act],[data-try],[data-lic],[data-judge],[data-conf],[data-upgrade],[data-swap],[data-licid]");
   if (!t) return;
   const d = t.dataset;
-  if (d.sel) { ui.sel = d.sel; if (ui.tab === "shop" && !["hero_illustration", "feature_row"].includes(d.sel)) ui.tab = "history"; ui.tryOn = ui.tab === "shop" ? ui.tryOn : null; if (ui.review && S.carts[ui.review]?.element_key !== d.sel) ui.review = null; return render(); }
-  if (d.tab) { ui.tab = d.tab; ui.licView = null; if (d.tab !== "shop") ui.tryOn = null; else if (!["hero_illustration", "feature_row"].includes(ui.sel)) ui.sel = "hero_illustration"; return render(); }
+  if (d.sel) { if (ui.tab === "shop" && shoppable(d.sel) && d.sel !== ui.sel) ui.tryOn = null; ui.sel = d.sel; if (ui.tab === "shop" && !shoppable(d.sel)) ui.tab = "history"; ui.tryOn = ui.tab === "shop" ? ui.tryOn : null; if (ui.review && S.carts[ui.review]?.element_key !== d.sel) ui.review = null; return render(); }
+  if (d.tab) { ui.tab = d.tab; ui.licView = null; if (d.tab !== "shop") ui.tryOn = null; else if (!shoppable(ui.sel)) ui.sel = "hero_illustration"; return render(); }
   if (d.me) { if (ui.review) { ui.review = null; ui.tab = "shop"; } ui.me = d.me; store.set("strata-me", d.me); ui.tryOn = null; return render(); }
   if (d.try) { ui.tryOn = d.try; return render(); }
   if (d.lic) { ui.licence = d.lic; return render(); }
@@ -377,13 +415,24 @@ document.addEventListener("click", (ev) => {
     case "ask-approval": return act(() => api(`/api/cart/${ui.review}/ask`, { member: ui.me }));
     case "approve": return act(() => api(`/api/cart/${ui.review}/approve`, { member: ui.me }));
     case "approvals": { const c = toApprove()[0]; if (c) { ui.review = c.id; ui.sel = c.element_key; ui.tab = "shop"; ui.tryOn = c.asset_id; } return render(); }
-    case "pay": {
-      if (ui.paying) return;
-      ui.paying = true; render();
-      const id = ui.review;
+    case "visa": return act(async () => { const d = await api(`/api/cart/${ui.review}/checkout`, { member: ui.me }); ui.visa = { ...d, phase: "confirm", shown: 0 }; });
+    case "see-license": { const c = S.carts[ui.review]; ui.review = null; ui.tab = "licences"; ui.licView = c?.licence_id; ui.tryOn = null; return render(); }
+    case "visa-close": { const v = ui.visa; ui.visa = null; if (v?.phase === "approved") { ui.review = null; ui.tab = "licences"; ui.licView = v.cart.licence_id; ui.tryOn = null; ui.sel = v.cart.element_key; } return render(); }
+    case "passkey": {
+      if (!ui.visa || ui.visa.phase !== "confirm") return;
+      ui.visa.phase = "processing"; ui.visa.shown = 0; render();
+      const id = ui.visa.cart.id;
       return act(async () => {
-        try { const c = await api(`/api/cart/${id}/pay`, { member: ui.me }); if (c.status === "paid") { ui.review = null; ui.tab = "licences"; ui.licView = c.licence_id; ui.tryOn = null; ui.sel = c.element_key; } }
-        finally { ui.paying = false; }
+        try {
+          const c = await api(`/api/cart/${id}/pay`, { member: ui.me, passkey: true });
+          ui.visa.cart = c; ui.visa.steps = c.auth?.steps || [];
+          await new Promise((res) => { const t = setInterval(() => { ui.visa.shown++; render(); if (ui.visa.shown >= ui.visa.steps.length) { clearInterval(t); res(); } }, 420); });
+          ui.visa.phase = "approved";
+        } catch (e) {
+          const c = (await api("/api/state")).carts[id];
+          ui.visa.cart = c || ui.visa.cart; ui.visa.steps = c?.auth?.steps || []; ui.visa.shown = ui.visa.steps.length;
+          ui.visa.phase = "declined"; ui.visa.error = e.message;
+        }
       });
     }
     case "export": ui.review = null; ui.tab = "licences"; ui.licView = null; ui.tryOn = null; return render();
@@ -392,6 +441,7 @@ document.addEventListener("click", (ev) => {
 });
 document.addEventListener("change", (ev) => {
   const t = ev.target;
+  if (t.hasAttribute("data-shopfor")) { ui.sel = t.value; ui.tryOn = null; return render(); }
   if (!t.hasAttribute("data-tier") || !ui.review) return;
   const c = S.carts[ui.review];
   ui.licence = t.value;
@@ -408,7 +458,7 @@ $("#ask-form").addEventListener("submit", (ev) => {
 });
 document.addEventListener("keydown", (ev) => {
   if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches?.("[data-sel],[data-try],[data-licid]")) { ev.preventDefault(); ev.target.click(); return; }
-  if (ev.key === "Escape") { ui.catchOpen = false; render(); }
+  if (ev.key === "Escape") { ui.catchOpen = false; if (ui.visa && ui.visa.phase !== "processing") ui.visa = null; render(); }
 });
 
 (async () => {

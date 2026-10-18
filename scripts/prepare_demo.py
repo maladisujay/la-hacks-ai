@@ -4,7 +4,8 @@
     uv run python scripts/prepare_demo.py   # in another, ~1-2 min
 
 Pre-runs: Alex's shortlist for the hero illustration and Priya's catch-up. The heading conflict is left for
-you to run live on camera.
+you to run live on camera. On success the state is saved to demo/demo_snapshot.json (real CREAO results);
+if a venue network blocks CREAO later, `prepare_demo.py --restore` brings that state back instantly.
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ BASE = "http://localhost:8044"
 
 def main() -> None:
     c = httpx.Client(base_url=BASE, timeout=30)
+    if "--restore" in sys.argv:
+        r = c.post("/api/snapshot/restore")
+        sys.exit(r.json().get("detail") if r.status_code >= 400 else "Restored the last prepared demo (real CREAO results).")
     try:
         modes = c.get("/api/state").json()["modes"]
     except httpx.HTTPError:
@@ -50,7 +54,9 @@ def main() -> None:
     for r in runs:
         print(f"{r['kind']:8} {r['status']:9} run {r['run_id']} · {r['message'][:90]}")
     if failed:
-        sys.exit("Some runs failed; run this script again.")
+        sys.exit(f"Some runs failed ({failed[0]['message']}). If CREAO is unreachable, switch networks and retry, "
+                 "or use --restore.")
+    c.post("/api/snapshot/save").raise_for_status()
     print("\nReady. Open http://localhost:8044 and follow the demo script.")
 
 

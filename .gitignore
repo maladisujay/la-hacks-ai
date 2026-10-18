@@ -10,3 +10,4 @@ agent1*_data.json
 demo/state.json
 .DS_Store
 demo/state*.json
+demo/demo_snapshot.json

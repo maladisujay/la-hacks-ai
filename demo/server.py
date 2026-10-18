@@ -16,6 +16,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
+import httpx
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -36,7 +37,7 @@ STATE_FILE = Path(os.getenv("STRATA_STATE_FILE", HERE / "state.json"))
 LICENCE_LABELS = {"personal": "Personal · not for client work", "commercial": "Commercial · site and app",
                   "extended": "Extended · print and merchandise"}
 TIER_RANK = {"personal": 0, "commercial": 1, "extended": 2}
-SPOT_KIND = {"illustration_slot": "illustration", "icon_row": "icon_set"}
+SPOT_KIND = {"illustration_slot": "illustration", "icon_row": "icon_set", "pattern_slot": "pattern"}
 
 app = FastAPI(title="Strata demo")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -53,7 +54,8 @@ def load() -> dict:
 
 
 S = load()
-S.setdefault("payment_method", payment_method())
+if "agent_token" not in S.get("payment_method", {}):
+    S["payment_method"] = payment_method()
 
 
 def save() -> None:
@@ -103,6 +105,28 @@ def state():
     return {**S, "payment_method": pm, "modes": {k: agents.mode(k) for k in agents.ROLES},
             "payments": "visa-simulated", "licence_labels": LICENCE_LABELS, "editable": EDITABLE,
             "export": export_check(), "today": date.today().isoformat()}
+
+
+SNAPSHOT = HERE / "demo_snapshot.json"
+
+
+@app.post("/api/snapshot/save")
+def snapshot_save():
+    """Keep the state right after a successful prepare (real CREAO runs) to restore if the network blocks CREAO."""
+    if not any(r["mode"] == "creao" and r["status"] == "completed" for r in S["runs"]):
+        raise HTTPException(409, "No completed CREAO runs to keep")
+    SNAPSHOT.write_text(json.dumps(S, ensure_ascii=False, indent=1))
+    return {"ok": True}
+
+
+@app.post("/api/snapshot/restore")
+def snapshot_restore():
+    global S
+    if not SNAPSHOT.exists():
+        raise HTTPException(404, "No snapshot yet; run prepare_demo.py once on a network that reaches CREAO")
+    S = json.loads(SNAPSHOT.read_text())
+    save()
+    return {"ok": True}
 
 
 @app.post("/api/reset")
@@ -158,14 +182,15 @@ def saw_summary(kind: str, ctx: dict) -> list[str]:
 
 
 def rules_view() -> list[dict]:
-    return [{k: r[k] for k in ("id", "text", "scope", "members", "kept", "undone", "requires")} for r in S["rules"]]
+    return [{**{k: r[k] for k in ("id", "text", "scope", "members", "kept", "undone", "requires")},
+             "applies_to": r.get("applies_to", [])} for r in S["rules"]]
 
 
 def context_for(kind: str, ask: AgentAsk) -> dict:
     m = ask.member
     if kind == "curate":
         spot = element(ask.spot_key or "hero_illustration")
-        spot_kind = "illustration" if spot["kind"] == "illustration_slot" else "icon_set"
+        spot_kind = SPOT_KIND[spot["kind"]]
         return {"member": m, "spot": {"key": spot["key"], "label": spot["name"], "kind": spot_kind},
                 "licence": ask.licence, "budget_cents": ask.budget_cents, "mandate": S["mandates"][m],
                 "rules": rules_view(),
@@ -207,7 +232,7 @@ async def start_agent(kind: str, ask: AgentAsk):
     if kind == "curate":
         ask.spot_key = ask.spot_key or "hero_illustration"
         if element(ask.spot_key)["kind"] not in SPOT_KIND:
-            raise HTTPException(400, "The shop fills the hero illustration or the feature row")
+            raise HTTPException(400, "The shop fills art, icon and pattern elements")
     if any(r["kind"] == kind and r["member"] == ask.member and r["status"] in ("queued", "running")
            and r["element_key"] == ask.element_key and r["spot_key"] == ask.spot_key for r in S["runs"]):
         raise HTTPException(409, "Strata is already working on this")
@@ -242,8 +267,10 @@ async def execute(run: dict, ctx: dict) -> None:
             reply = agents.OFFLINE[run["kind"]](run["request"], ctx)
         APPLY[run["kind"]](run, reply)
         run["status"] = "completed"
+    except httpx.HTTPError as e:  # network: DNS blocked, offline, timeout
+        run.update(status="failed", message=f"can't reach CREAO from this network ({e.__class__.__name__})")
     except Exception as e:  # noqa: BLE001 - shown to the user as a quiet failure line
-        run.update(status="failed", message=str(e)[:300])
+        run.update(status="failed", message=(str(e) or e.__class__.__name__)[:300])
     run["finished"] = agents.now()
     save()
 
@@ -537,31 +564,99 @@ def approve(cart_id: str, who: Who):
     return cart
 
 
-@app.post("/api/cart/{cart_id}/pay")
-async def pay(cart_id: str, who: Who):
+DECLINE_CODES = {"expired": ("54", "Expired payment instruction"), "tier": ("57", "Not permitted for this agent"),
+                 "limit": ("61", "Exceeds spend control")}
+
+
+def controls_for(cart: dict) -> list[dict]:
+    """Visa Intelligent Commerce style spend controls on Strata's agent token, checked for this cart."""
+    m, md = cart["member"], S["mandates"][cart["member"]]
+    left = md["limit_cents"] - md["spent_cents"]
+    approved = cart.get("approved_by")
+    return [
+        {"label": f"Up to {dollars(md['limit_cents'])} a month for {m}" + (f" · approved by {approved}" if approved else ""),
+         "ok": bool(approved) or cart["amount_cents"] <= left, "code": "limit",
+         "detail": f"{money(max(0, left))} left before this"},
+        {"label": f"{cart['licence'].capitalize()} licenses allowed", "code": "tier",
+         "ok": bool(approved) or cart["licence"] in md["allowed_licences"],
+         "detail": ", ".join(md["allowed_licences"])},
+        {"label": "Design assets only", "ok": True, "code": "category", "detail": "Digital goods · design assets"},
+        {"label": f"Valid until {md['expires']}", "ok": not expired(md), "code": "expired", "detail": f"set by {md['set_by']}"},
+    ]
+
+
+@app.post("/api/cart/{cart_id}/checkout")
+def checkout(cart_id: str, who: Who):
+    """Open a simulated Visa checkout: what the buyer sees before confirming with a passkey."""
     cart = cart_of(cart_id)
     if who.member != cart["member"]:
         raise HTTPException(403, f"Only {cart['member']} can pay for this; it's on their limit")
+    if cart["status"] not in ("ready", "paid"):
+        raise HTTPException(409, "This cart isn't ready to pay")
+    pm, a = S["payment_method"], asset(cart["asset_id"])
+    if not cart.get("checkout"):
+        cart["checkout"] = {
+            "merchant": "Strata Asset Store", "seller": a["creator"],
+            "lines": [{"label": f"{a['title']} · {cart['licence']} license", "cents": cart["amount_cents"]},
+                      {"label": "Tax (digital goods, simulated)", "cents": 0}],
+            "intent": {"agent": "Strata", "action": "purchase", "item": a["title"], "for": cart["member"],
+                       "signature": "tap_" + secrets.token_hex(6), "valid_minutes": 8},
+            "opened": agents.now()}
+        save()
+    card = {k: pm[k] for k in ("brand", "product", "last4", "holder", "expiry")}
+    return {"cart": cart, "card": card, "agent_token": pm["agent_token"], "controls": controls_for(cart)}
+
+
+class PayIn(BaseModel):
+    member: str
+    passkey: bool = False
+
+
+@app.post("/api/cart/{cart_id}/pay")
+async def pay(cart_id: str, body: PayIn):
+    cart = cart_of(cart_id)
+    if body.member != cart["member"]:
+        raise HTTPException(403, f"Only {cart['member']} can pay for this; it's on their limit")
     if cart["status"] in ("paid", "paying"):  # idempotent: a double click never charges twice
         return cart
-    if cart["status"] != "ready":
-        raise HTTPException(409, "This cart isn't ready to pay")
-    why_not = None if cart.get("approved_by") else check_limit(cart["member"], cart["licence"], cart["amount_cents"])
-    if why_not:  # the limit is re-checked at pay time: it may have changed since the cart was made
-        cart["status"] = "declined"
-        cart["trail"].append({"step": "Payment", "ok": False, "text": f"Declined before charging: {why_not}",
-                              "at": agents.now()})
+    if cart["status"] != "ready" or not cart.get("checkout"):
+        raise HTTPException(409, "Open the Visa checkout first")
+    if not body.passkey:
+        raise HTTPException(401, "Confirm with your passkey to pay")
+    pm, now = S["payment_method"], agents.now()
+    failed = next((c for c in controls_for(cart) if not c["ok"]), None)
+    if failed:  # spend controls are re-checked at authorization: limits may have changed since the cart was made
+        code, text = DECLINE_CODES.get(failed["code"], ("05", "Do not honor"))
+        cart.update(status="declined", auth={"approved": False, "response_code": code, "response": text,
+                                             "steps": [{"t": "Passkey verified", "ok": True},
+                                                       {"t": "Spend controls", "ok": False, "x": failed["label"]}]})
+        cart["trail"].append({"step": "Payment", "ok": False, "at": now,
+                              "text": f"Declined by Visa spend control · {code} {text}"})
         save()
-        raise HTTPException(402, f"Payment declined: {why_not}.")
+        raise HTTPException(402, f"Declined · {code} {text}. Ask {S['mandates'][cart['member']]['set_by']} to approve.")
     cart["status"] = "paying"
     save()
-    await asyncio.sleep(1.2)  # simulated Visa authorization; nothing real is charged
-    pm = S["payment_method"]
+    await asyncio.sleep(1.0)  # simulated authorization round trip; nothing real is charged
     auth = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
-    cart.update(auth_code=auth, network_token=f"vtok_…{pm['last4']}")
-    cart["trail"].append({"step": "Payment", "at": agents.now(),
-                          "text": f"Visa ending {pm['last4']} · authorized (simulated) · auth {auth} · "
-                                  "Strata's agents never see the card"})
+    txn = "".join(secrets.choice(string.digits) for _ in range(15))
+    high = cart["amount_cents"] > 5000 or bool(cart.get("approved_by"))
+    tok = pm["agent_token"]["last4"]
+    steps = [
+        {"t": "Passkey verified", "ok": True, "x": f"{cart['member']} confirmed with Visa Payment Passkey on this device"},
+        {"t": "Trusted agent verified", "ok": True,
+         "x": f"Strata Asset Store checked Strata's signed intent {cart['checkout']['intent']['signature']}"},
+        {"t": "Spend controls passed", "ok": True, "x": " · ".join(c["label"] for c in controls_for(cart)[:2])},
+        {"t": "Agent token + cryptogram", "ok": True,
+         "x": f"Agent token •••• {tok} with a one-time cryptogram; the card number is never shared"},
+        {"t": "Risk check", "ok": True, "x": "Higher amount · passkey counts as strong authentication" if high
+         else "Low risk · no extra challenge"},
+        {"t": "Issuer approved", "ok": True, "x": f"Response 00 · auth {auth} · Visa transaction {txn}"},
+    ]
+    cart.update(auth_code=auth, network_token=f"•••• {tok}",
+                auth={"approved": True, "response_code": "00", "response": "Approved", "auth_code": auth,
+                      "txn_id": txn, "token_last4": tok, "card_last4": pm["last4"], "at": now, "steps": steps})
+    cart["trail"].append({"step": "Payment", "at": now,
+                          "text": f"Visa •••• {pm['last4']} via agent token •••• {tok} · 00 approved · auth {auth}"})
     fulfil(cart)
     return cart
 
@@ -576,7 +671,7 @@ def fulfil(cart: dict) -> None:
            [f"Suggested by Strata from a team rule ({team_rule_people()})", f"tried on by {m}"] if cart.get("suggested")
            else [f"Picked by {m}", f"tried on by {m}"])
     how += ([f"approved by {cart['approved_by']}"] if cart.get("approved_by") else []) + \
-        ["paid with Visa (simulated)", f"placed on the {el['name'].lower()}"]
+        [f"confirmed with a Visa passkey, paid by agent token (simulated)", f"placed on the {el['name'].lower()}"]
     lic = {"licence_id": f"L-{uuid.uuid4().hex[:4].upper()}", "asset_id": cart["asset_id"],
            "tier": cart["licence"], "element_keys": [cart["element_key"]], "member": m,
            "amount_cents": cart["amount_cents"] + (old["amount_cents"] if old else 0), "paid_cents": cart["amount_cents"],
