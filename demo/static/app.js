@@ -251,7 +251,7 @@ function trailSteps(c) {
   const lead = S.mandates[c.member]?.set_by, has = (s) => c.trail.some((t) => t.step === s);
   const steps = c.trail.map((t) => ({ st: t.ok === false ? "warn" : "done", t: t.step, x: t.text }));
   if (c.status === "needs_approval") steps.push({ st: "current", t: "Approval", x: c.approval_requested ? `Waiting for ${lead}'s OK.` : `${lead} needs to approve this one purchase.` });
-  if (!has("Payment")) steps.push({ st: c.status === "ready" || c.status === "paying" ? "current" : "pending", t: "Payment", x: `Visa ending ${S.payment_method.last4}, simulated. The agent never sees the card.` });
+  if (!has("Payment")) steps.push({ st: c.status === "ready" || c.status === "paying" ? "current" : "pending", t: "Payment", x: "Visa Click to Pay (simulated). Strata's agents never see the card." });
   if (!has("Receipt")) steps.push({ st: "pending", t: "Receipt", x: `License filed against the ${lower(c.element_key)}` });
   return steps;
 }
@@ -275,7 +275,7 @@ function renderReview() {
     foot = `<button class="btn pay" disabled>Approved · ${esc(c.member)} can pay now</button>`;
   } else if (c.status === "ready" || c.status === "paying") {
     const going = ui.paying || c.status === "paying";
-    foot = `<button class="btn dark pay visa-go" data-act="visa" ${going ? "disabled" : ""}>${going ? "Authorizing with Visa (simulated)…" : `Continue to Visa checkout · ${money(c.amount_cents)}`}</button>`;
+    foot = `<button class="btn dark pay visa-go" data-act="visa" ${going ? "disabled" : ""}>${going ? "Authorizing with Visa (simulated)…" : `Checkout with Click to Pay · ${money(c.amount_cents)}`}</button>`;
   } else if (ui.me === lead && c.member !== lead) {
     foot = `<button class="btn dark pay" data-act="approve">Approve ${money(c.amount_cents)} for ${esc(c.member)}</button>`;
   } else if (c.approval_requested) {
@@ -283,7 +283,7 @@ function renderReview() {
   } else {
     foot = `<button class="btn dark pay" data-act="ask-approval">Ask ${esc(lead)} to approve</button>`;
   }
-  return [body, `${foot}<div class="foot-note">Simulated Visa Intelligent Commerce checkout · nothing real is charged</div>`];
+  return [body, `${foot}<div class="foot-note">Simulated Visa Click to Pay checkout · nothing real is charged</div>`];
 }
 
 function renderGuard() {
@@ -322,30 +322,54 @@ function renderPanel() {
 
 // ---------------------------------------------------------------- Visa checkout (simulated Visa Intelligent Commerce)
 const FINGER = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 11v4.5c0 1.6.5 3 1.4 4.2"/><path d="M8.5 13.5v1.8c0 2.4.8 4.6 2.2 6.2"/><path d="M15.5 13v2c0 1.2.2 2.4.6 3.4"/><path d="M5.6 16.5c-.4-1.1-.6-2.3-.6-3.5a7 7 0 0 1 14 0v.5"/><path d="M7.5 6.2A7 7 0 0 1 17 6.8"/><path d="M12 11a1.5 1.5 0 0 1 1.5 1.5"/></svg>`;
+const CTP = `<svg width="22" height="16" viewBox="0 0 22 16" fill="none" aria-hidden="true"><rect x=".75" y=".75" width="20.5" height="14.5" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h7M9.5 5.5 12 8l-2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.5" cy="8" r="1.6" fill="currentColor"/></svg>`;
+const cardArt = (c, small) => `<div class="vx-card ${small ? "sm" : ""}"><span class="vx-cp">${esc(c.presentationName)}</span><span class="vx-cn">•••• ${esc(c.panLastFour)}</span><span class="vx-ce">${esc(c.panExpirationMonth)}/${esc(String(c.panExpirationYear).slice(-2))}</span><span class="vx-cb">VISA</span></div>`;
 function renderVisa() {
   const el = $("#sheet"), v = ui.visa;
   if (!v) { el.className = ""; el.innerHTML = ""; return; }
-  const c = v.cart, co = c.checkout, card = v.card, tok = v.agent_token, total = co.lines.reduce((x, l) => x + l.cents, 0);
-  const head = `<div class="vx-top"><span class="vx-brand">VISA</span><span class="vx-title">Checkout</span><span class="vx-sim">simulated</span>${v.phase === "processing" ? "" : `<button class="vx-x" data-act="visa-close" aria-label="Close">×</button>`}</div>
-    <div class="vx-merchant"><div><b>${esc(co.merchant)}</b><span>Sold by ${esc(co.seller)} · for ${esc(S.file.name)}</span></div><div class="vx-amt">${money(total)}</div></div>`;
-  let body;
-  if (v.phase === "confirm") {
-    body = `<div class="vx-sec">${co.lines.map((l) => `<div class="vx-row"><span>${esc(l.label)}</span><span class="mono">${money(l.cents)}</span></div>`).join("")}<div class="vx-row vx-total"><span>Total</span><span class="mono">${money(total)}</span></div></div>
-      <div class="vx-sec vx-pay"><div class="vx-card" aria-label="Visa card ending ${esc(card.last4)}"><span class="vx-cb">VISA</span><span class="vx-cp">${esc(card.product)}</span><span class="vx-cn">•••• ${esc(card.last4)}</span><span class="vx-ch">${esc(card.holder.toUpperCase())}</span><span class="vx-ce">EXP ${esc(card.expiry)}</span></div>
-        <div class="vx-agent"><div class="vx-k">Paying through an AI agent</div><div><b>Strata</b> · agent token •••• ${esc(tok.last4)}</div><div class="vx-m">Created by ${esc(tok.created_by)} with ${esc(tok.created_with)} · ${esc(tok.created)}. The merchant and the agent never see the card number.</div></div></div>
-      <div class="vx-sec"><div class="vx-k">Spend controls on this agent token</div>${v.controls.map((x) => `<div class="vx-ctl ${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "!"}</span><div>${esc(x.label)}<i>${esc(x.detail)}</i></div></div>`).join("")}</div>
-      <div class="vx-sec"><div class="vx-k">Trusted agent intent</div><div class="vx-m">Strata signed: <b>${esc(co.intent.action)} ${esc(co.intent.item)}</b> for ${esc(co.intent.for)} at ${esc(co.merchant)} · <span class="mono">${esc(co.intent.signature)}</span> · valid ${co.intent.valid_minutes} min</div></div>
-      <button class="vx-btn" data-act="passkey">${FINGER}<span>Confirm ${money(total)} with passkey</span></button>
-      <div class="vx-foot">Simulated Visa Intelligent Commerce flow with test data · nothing real is charged</div>`;
-  } else {
-    const steps = (v.steps || []).slice(0, v.shown);
-    const done = v.phase === "approved", bad = v.phase === "declined";
-    body = `<ul class="vx-steps">${steps.map((x) => `<li class="${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "!"}</span><div><b>${esc(x.t)}</b>${x.x ? `<i>${esc(x.x)}</i>` : ""}</div></li>`).join("")}${v.phase === "processing" ? `<li class="wait"><span>…</span><div><b>${v.steps ? "Authorizing" : "Waiting for passkey"}</b></div></li>` : ""}</ul>
-      ${done ? `<div class="vx-ok"><div class="vx-big">Approved</div><div class="vx-grid"><span>Response</span><b class="mono">00 · Approved</b><span>Auth code</span><b class="mono">${esc(c.auth.auth_code)}</b><span>Visa transaction</span><b class="mono">${esc(c.auth.txn_id)}</b><span>Paid with</span><b class="mono">agent token •••• ${esc(c.auth.token_last4)} → Visa •••• ${esc(c.auth.card_last4)}</b></div><button class="vx-btn" data-act="visa-close"><span>Done · see the license</span></button></div>` : ""}
-      ${bad ? `<div class="vx-bad"><div class="vx-big">Declined</div><div>${esc(v.error || "")}</div><button class="vx-btn ghost" data-act="visa-close"><span>Back to review</span></button></div>` : ""}`;
+  const c = v.cart, total = c.amount_cents, scr = v.screen, a = assetOf(c.asset_id) || {};
+  const busyScr = scr === "processing";
+  const head = `<div class="vx-top"><span class="vx-ctp">${CTP}<b>Click to Pay</b></span><span class="vx-with">with <i>VISA</i></span><span class="vx-sim">simulated</span>${busyScr ? "" : `<button class="vx-x" data-act="visa-close" aria-label="Close">×</button>`}</div>
+    <div class="vx-merchant"><div><b>${esc(v.dpa.dpaName)}</b><span>${esc(a.title)} · ${esc(c.licence)} license · sold by ${esc(a.creator)}</span></div><div class="vx-amt">${money(total)}</div></div>`;
+  const err = v.error ? `<div class="vx-err">${esc(v.error)}</div>` : "";
+  let body = "";
+  if (scr === "lookup") {
+    body = `<div class="vx-sec"><div class="vx-k">Tally's spending rules · checked by Strata</div>${v.rules.map((x) => `<div class="vx-ctl ${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "!"}</span><div>${esc(x.label)}</div></div>`).join("")}</div>
+      <div class="vx-sec"><div class="vx-h">Pay with your saved Visa card</div><div class="vx-m">Enter the email linked to your Click to Pay profile. We'll send a one-time code.</div>
+      <label class="vx-field"><span>Email</span><input data-src="email" type="email" value="${esc(v.emailDraft ?? v.email ?? "")}" autocomplete="off"></label>${err}</div>
+      <button class="vx-btn" data-act="src-lookup">Continue</button>`;
+  } else if (scr === "otp") {
+    body = `<div class="vx-sec"><div class="vx-h">Confirm it's you</div><div class="vx-m">Enter the 6-digit code Visa sent to <b>${esc(v.maskedValidationChannel)}</b>.</div>
+      <label class="vx-field"><span>One-time code</span><input data-src="code" inputmode="numeric" maxlength="6" value="${esc(v.codeDraft || "")}" autocomplete="one-time-code"></label>
+      <div class="vx-hint">Simulation: the code "sent" is <b class="mono">${esc(v.simulatedCode)}</b></div>${err}</div>
+      <button class="vx-btn" data-act="src-validate">Verify</button><button class="vx-link" data-act="src-resend">Send a new code</button>`;
+  } else if (scr === "cards") {
+    body = `<div class="vx-sec"><div class="vx-h">Choose a card</div>${v.recognized ? `<div class="vx-m">Welcome back, recognized on this browser.</div>` : ""}
+      ${v.maskedCards.map((k) => `<label class="vx-cardrow ${k.usable ? "" : "off"}"><input type="radio" name="vxcard" data-src="card" value="${esc(k.srcDigitalCardId)}" ${k.usable ? "" : "disabled"} ${v.cardDraft === k.srcDigitalCardId ? "checked" : ""}>${cardArt(k, true)}<div><b>${esc(k.presentationName)}</b><span>•••• ${esc(k.panLastFour)} · ${esc(k.holder)}</span>${k.usable ? "" : `<em>${esc(k.reason)}</em>`}</div></label>`).join("")}${err}</div>
+      <button class="vx-btn" data-act="src-select" ${v.cardDraft ? "" : "disabled"}>Continue</button>
+      ${v.recognized ? `<button class="vx-link" data-act="src-forget">Not you? Forget this browser</button>` : ""}`;
+  } else if (scr === "review") {
+    const k = v.maskedCards.find((x) => x.srcDigitalCardId === v.selected) || {};
+    body = `<div class="vx-sec vx-rev">${cardArt(k)}<div><div class="vx-k">Paying with</div><b>${esc(k.presentationName)} •••• ${esc(k.panLastFour)}</b><div class="vx-m">${esc(v.dpa.dpaName)} gets a Visa token, never your card number.</div><button class="vx-link inline" data-act="src-change">Change card</button></div></div>
+      <div class="vx-sec"><div class="vx-row"><span>${esc(a.title)} · ${esc(c.licence)} license</span><span class="mono">${money(total)}</span></div><div class="vx-row"><span>Tax (digital goods)</span><span class="mono">$0.00</span></div><div class="vx-row vx-total"><span>Total</span><span class="mono">${money(total)}</span></div></div>
+      <div class="vx-sec"><label class="vx-check"><input type="checkbox" data-src="remember" ${v.remember !== false ? "checked" : ""}> Remember me on this browser</label>
+      <label class="vx-check"><input type="checkbox" data-src="consent" ${v.consent ? "checked" : ""}> I agree to the <a href="${esc(v.terms)}" target="_blank" rel="noopener">Visa Click to Pay Terms</a> and have read the <a href="${esc(v.privacy)}" target="_blank" rel="noopener">Visa Privacy Notice</a>.</label>${err}</div>
+      <button class="vx-btn" data-act="src-checkout" ${v.consent ? "" : "disabled"}>Pay ${money(total)}</button>`;
+  } else if (scr === "authenticate") {
+    body = `<div class="vx-sec"><div class="vx-h">Visa needs to verify it's you</div><div class="vx-m">This purchase needs an extra check. Use the passkey on this device.</div>${err}</div>
+      <button class="vx-btn" data-act="src-auth">${FINGER}<span>Verify with passkey</span></button>`;
+  } else if (scr === "processing") {
+    body = `<ul class="vx-steps">${(v.steps || []).map((x) => `<li class="${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "!"}</span><div><b>${esc(x.t)}</b>${x.x ? `<i>${esc(x.x)}</i>` : ""}</div></li>`).join("")}<li class="wait"><span>…</span><div><b>Processing</b></div></li></ul>`;
+  } else if (scr === "approved") {
+    const au = c.auth || {};
+    body = `<ul class="vx-steps">${(v.steps || []).map((x) => `<li class="ok"><span>✓</span><div><b>${esc(x.t)}</b>${x.x ? `<i>${esc(x.x)}</i>` : ""}</div></li>`).join("")}</ul>
+      <div class="vx-ok"><div class="vx-big">Payment approved</div><div class="vx-grid"><span>Transaction reference</span><b class="mono">${esc((au.srcCorrelationId || "").slice(0, 18))}…</b><span>Card</span><b class="mono">${esc(au.card_name)} •••• ${esc(au.card_last4)}</b><span>Approval code</span><b class="mono">${esc(au.auth_code)}</b></div>
+      <button class="vx-btn" data-act="visa-close"><span>Done · see the license</span></button></div>`;
+  } else if (scr === "declined") {
+    body = `<ul class="vx-steps">${(v.steps || []).map((x) => `<li class="${x.ok ? "ok" : "bad"}"><span>${x.ok ? "✓" : "!"}</span><div><b>${esc(x.t)}</b>${x.x ? `<i>${esc(x.x)}</i>` : ""}</div></li>`).join("")}</ul><div class="vx-bad"><div class="vx-big">Not paid</div><div>${esc(v.error || "")}</div><button class="vx-btn ghost" data-act="visa-close"><span>Back to review</span></button></div>`;
   }
   el.className = "on";
-  el.innerHTML = `<div class="vx" role="dialog" aria-modal="true" aria-label="Visa checkout">${head}${body}</div>`;
+  el.innerHTML = `<div class="vx" role="dialog" aria-modal="true" aria-label="Visa Click to Pay">${head}${body}<div class="vx-foot">Simulated Visa Click to Pay (EMVCo SRC) flow with test data · nothing real is charged</div></div>`;
 }
 
 // ---------------------------------------------------------------- catch-up popover
@@ -367,7 +391,7 @@ function renderPop() {
 function focusKey() {
   const f = document.activeElement;
   if (!f || f === document.body) return null;
-  const k = ["sel", "try", "tab", "act", "me", "licid", "tier"].find((x) => f.dataset && x in f.dataset);
+  const k = ["src", "sel", "try", "tab", "act", "me", "licid", "tier"].find((x) => f.dataset && x in f.dataset);
   return k ? `[data-${k}="${CSS.escape(f.dataset[k])}"]${k === "tier" ? `[value="${CSS.escape(f.value)}"]` : ""}` : null;
 }
 function render() {
@@ -375,7 +399,7 @@ function render() {
   if (!S.elements[ui.sel]) ui.sel = "hero_heading";
   const fk = focusKey();
   renderTop(); renderRail(); renderCanvas(); renderPanel(); renderPop(); renderVisa();
-  if (fk && (document.activeElement === document.body || !document.activeElement)) document.querySelector(fk)?.focus({ preventScroll: true });
+  if (fk && (document.activeElement === document.body || !document.activeElement)) { const n = document.querySelector(fk); n?.focus({ preventScroll: true }); if (n?.setSelectionRange && n.type !== "email") n.setSelectionRange(n.value.length, n.value.length); }
 }
 
 // ---------------------------------------------------------------- actions
@@ -386,6 +410,23 @@ async function refresh(force) {
   if (force || j !== lastJson || live) { lastJson = j; S = s; render(); }
 }
 async function act(fn) { try { await fn(); await refresh(true); } catch (e) { toast(e.message); await refresh(true).catch(() => {}); } }
+async function srcCall(step, extra, processing) {
+  const v = ui.visa; if (!v) return;
+  v.error = "";
+  if (processing) { v.screen = "processing"; v.steps = []; render(); }
+  try {
+    const d = await api(`/api/cart/${v.cart.id}/src/${step}`, { member: ui.me, ...extra });
+    Object.assign(v, d, { codeDraft: step === "lookup" ? "" : v.codeDraft });
+    if (step === "select") v.cardDraft = d.selected;
+  } catch (e) {
+    const st = await api("/api/state"); const c = st.carts[v.cart.id];
+    v.error = e.message;
+    if (c?.status === "declined") { v.cart = c; v.screen = "declined"; v.steps = c.src?.steps || []; }
+    else if (processing) v.screen = c?.src?.screen || "review";
+    else if (/Too many/.test(e.message)) v.screen = "lookup";
+  }
+  await refresh(true);
+}
 const newCart = (body) => act(async () => { const c = await api("/api/cart", { member: ui.me, ...body }); ui.review = c.id; ui.licView = null; });
 const openShop = (k) => { ui.review = null; ui.tab = "shop"; ui.sel = k || "hero_illustration"; ui.tryOn = null; render(); };
 
@@ -415,32 +456,24 @@ document.addEventListener("click", (ev) => {
     case "ask-approval": return act(() => api(`/api/cart/${ui.review}/ask`, { member: ui.me }));
     case "approve": return act(() => api(`/api/cart/${ui.review}/approve`, { member: ui.me }));
     case "approvals": { const c = toApprove()[0]; if (c) { ui.review = c.id; ui.sel = c.element_key; ui.tab = "shop"; ui.tryOn = c.asset_id; } return render(); }
-    case "visa": return act(async () => { const d = await api(`/api/cart/${ui.review}/checkout`, { member: ui.me }); ui.visa = { ...d, phase: "confirm", shown: 0 }; });
+    case "visa": return act(async () => { const d = await api(`/api/cart/${ui.review}/src/init`, { member: ui.me }); ui.visa = { ...d, recognized: d.screen === "cards", remember: true, consent: false }; });
+    case "src-lookup": return srcCall("lookup", { email: ui.visa.emailDraft ?? ui.visa.email });
+    case "src-resend": return srcCall("lookup", { email: ui.visa.email });
+    case "src-validate": return srcCall("validate", { code: ui.visa.codeDraft || "" });
+    case "src-select": return srcCall("select", { card: ui.visa.cardDraft });
+    case "src-change": ui.visa.screen = "cards"; return render();
+    case "src-checkout": return srcCall("checkout", { remember: ui.visa.remember !== false, consent: !!ui.visa.consent }, true);
+    case "src-auth": return srcCall("authenticate", {}, true);
+    case "src-forget": return act(async () => { await api(`/api/cart/${ui.visa.cart.id}/src/forget`, { member: ui.me }); const d = await api(`/api/cart/${ui.visa.cart.id}/src/init`, { member: ui.me }); ui.visa = { ...ui.visa, ...d, recognized: false, error: "" }; });
+    case "visa-close": { const v = ui.visa; ui.visa = null; if (v?.screen === "approved") { ui.review = null; ui.tab = "licences"; ui.licView = v.cart.licence_id; ui.tryOn = null; ui.sel = v.cart.element_key; } return render(); }
     case "see-license": { const c = S.carts[ui.review]; ui.review = null; ui.tab = "licences"; ui.licView = c?.licence_id; ui.tryOn = null; return render(); }
-    case "visa-close": { const v = ui.visa; ui.visa = null; if (v?.phase === "approved") { ui.review = null; ui.tab = "licences"; ui.licView = v.cart.licence_id; ui.tryOn = null; ui.sel = v.cart.element_key; } return render(); }
-    case "passkey": {
-      if (!ui.visa || ui.visa.phase !== "confirm") return;
-      ui.visa.phase = "processing"; ui.visa.shown = 0; render();
-      const id = ui.visa.cart.id;
-      return act(async () => {
-        try {
-          const c = await api(`/api/cart/${id}/pay`, { member: ui.me, passkey: true });
-          ui.visa.cart = c; ui.visa.steps = c.auth?.steps || [];
-          await new Promise((res) => { const t = setInterval(() => { ui.visa.shown++; render(); if (ui.visa.shown >= ui.visa.steps.length) { clearInterval(t); res(); } }, 420); });
-          ui.visa.phase = "approved";
-        } catch (e) {
-          const c = (await api("/api/state")).carts[id];
-          ui.visa.cart = c || ui.visa.cart; ui.visa.steps = c?.auth?.steps || []; ui.visa.shown = ui.visa.steps.length;
-          ui.visa.phase = "declined"; ui.visa.error = e.message;
-        }
-      });
-    }
     case "export": ui.review = null; ui.tab = "licences"; ui.licView = null; ui.tryOn = null; return render();
     case "lic-back": ui.licView = null; return render();
   }
 });
 document.addEventListener("change", (ev) => {
   const t = ev.target;
+  if (t.dataset?.src && ui.visa) { const k = t.dataset.src; if (k === "card") ui.visa.cardDraft = t.value; if (k === "remember") ui.visa.remember = t.checked; if (k === "consent") ui.visa.consent = t.checked; return render(); }
   if (t.hasAttribute("data-shopfor")) { ui.sel = t.value; ui.tryOn = null; return render(); }
   if (!t.hasAttribute("data-tier") || !ui.review) return;
   const c = S.carts[ui.review];
@@ -448,7 +481,9 @@ document.addEventListener("change", (ev) => {
   newCart({ asset_id: c.asset_id, licence: t.value, element_key: c.element_key });
 });
 document.addEventListener("toggle", (ev) => { if (ev.target.classList?.contains("saw")) ui.sawOpen = ev.target.open; }, true);
-document.addEventListener("input", (ev) => { if (ev.target.hasAttribute("data-budget")) ui.budget = ev.target.value.replace(/[^0-9.]/g, ""); });
+document.addEventListener("input", (ev) => {
+  const k = ev.target.dataset?.src;
+  if (k && ui.visa) { if (k === "email") ui.visa.emailDraft = ev.target.value; if (k === "code") ui.visa.codeDraft = ev.target.value.replace(/\D/g, "").slice(0, 6); return; } if (ev.target.hasAttribute("data-budget")) ui.budget = ev.target.value.replace(/[^0-9.]/g, ""); });
 $("#ask-form").addEventListener("submit", (ev) => {
   ev.preventDefault();
   const q = $("#ask-input").value.trim().slice(0, 500);
@@ -458,7 +493,7 @@ $("#ask-form").addEventListener("submit", (ev) => {
 });
 document.addEventListener("keydown", (ev) => {
   if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches?.("[data-sel],[data-try],[data-licid]")) { ev.preventDefault(); ev.target.click(); return; }
-  if (ev.key === "Escape") { ui.catchOpen = false; if (ui.visa && ui.visa.phase !== "processing") ui.visa = null; render(); }
+  if (ev.key === "Escape") { ui.catchOpen = false; if (ui.visa && ui.visa.screen !== "processing") ui.visa = null; render(); }
 });
 
 (async () => {

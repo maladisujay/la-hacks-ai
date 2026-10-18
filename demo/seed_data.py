@@ -57,12 +57,20 @@ CATALOG = [
 
 
 def payment_method() -> dict:
-    """The team's card on file, as Visa Intelligent Commerce would hold it: the card is tokenized and Strata gets its
-    own agent token with spend controls. Only the checkout reads this; it never goes into agent context."""
-    return {"brand": "Visa", "product": "Visa Signature Business", "last4": "4242", "holder": "Tally design",
-            "expiry": "09/29", "token": "vtok_" + secrets.token_hex(8),
-            "agent_token": {"last4": "8841", "bound_to": "Strata", "merchant_category": "Digital goods · design assets",
-                            "created_by": "Priya", "created_with": "Visa Payment Passkey", "created": "Oct 12"}}
+    """A simulated Visa Click to Pay (EMVCo SRC) system for the demo: consumer identities and their masked cards.
+    Only the checkout reads this; it never goes into agent context, and the browser only ever sees masked data."""
+    return {
+        "consumers": {"Priya": "priya@tally.design", "Alex": "alex@tally.design", "Sam": "sam@tally.design"},
+        "cards": [
+            {"srcDigitalCardId": "dc_" + secrets.token_hex(6), "panLastFour": "4242", "panExpirationMonth": "09",
+             "panExpirationYear": "2029", "presentationName": "Visa Signature Business", "holder": "Tally design",
+             "status": "ACTIVE", "billingCountry": "US", "tokenLastFour": "8841", "dateOfCardLastUsed": "2026-10-12"},
+            {"srcDigitalCardId": "dc_" + secrets.token_hex(6), "panLastFour": "7731", "panExpirationMonth": "03",
+             "panExpirationYear": "2028", "presentationName": "Visa Business Debit", "holder": "Tally design",
+             "status": "ACTIVE", "billingCountry": "CA", "tokenLastFour": "5520", "dateOfCardLastUsed": None},
+        ],
+        "recognition": {},  # member -> Merchant Recognition Token (MRT) after "Remember me"
+    }
 
 
 def seed() -> dict:

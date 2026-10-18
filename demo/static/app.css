@@ -296,3 +296,25 @@ button:focus-visible, input:focus-visible, [data-sel]:focus-visible, [data-try]:
 .s-goals b { display: block; font-family: var(--s-display); font-size: 20px; letter-spacing: -.02em; margin-bottom: 6px; }
 .s-goals span { font-size: 13.5px; color: #4A5672; }
 .shop-for select { font: inherit; color: inherit; border: 0; border-bottom: 1.5px dashed var(--control); background: none; padding: 0 2px; cursor: pointer; }
+.vx-ctp { display: inline-flex; align-items: center; gap: 8px; color: var(--vb); }
+.vx-with { font-size: 12.5px; color: #5B5F73; }
+.vx-with i { font-weight: 800; color: var(--vb); }
+.vx-h { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+.vx-field { display: grid; gap: 4px; margin-top: 12px; font-size: 12.5px; color: #5B5F73; }
+.vx-field input { font: 500 15px var(--ui); color: #1B1D2A; padding: 10px 12px; border: 1px solid #B9BCCB; border-radius: 8px; }
+.vx-field input[inputmode=numeric] { font-family: var(--mono); letter-spacing: .4em; }
+.vx-hint { margin-top: 8px; font-size: 12px; color: #5B5F73; background: #F4F5F9; padding: 6px 8px; border-radius: 6px; }
+.vx-err { margin-top: 8px; font-size: 13px; color: #8A5300; }
+.vx-link { display: block; margin: 0 auto 8px; border: 0; background: none; color: var(--vb); font-size: 13px; text-decoration: underline; }
+.vx-link.inline { margin: 4px 0 0; padding: 0; }
+.vx-cardrow { display: grid; grid-template-columns: 18px 84px 1fr; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #EEEFF4; cursor: pointer; }
+.vx-cardrow span { display: block; font-size: 12.5px; color: #5B5F73; }
+.vx-cardrow em { display: block; font-style: normal; font-size: 12px; color: #8A5300; }
+.vx-cardrow.off { opacity: .55; cursor: not-allowed; }
+.vx-card.sm { height: 54px; border-radius: 6px; padding: 5px 7px; }
+.vx-card.sm .vx-cp { font-size: 8px; } .vx-card.sm .vx-cn { top: 20px; left: 7px; font-size: 10px; } .vx-card.sm .vx-ce { display: none; } .vx-card.sm .vx-cb { font-size: 12px; right: 7px; bottom: 4px; }
+.vx-rev { display: grid; grid-template-columns: 170px 1fr; gap: 14px; align-items: center; }
+.vx-check { display: block; font-size: 13px; padding: 4px 0 4px 24px; text-indent: -24px; }
+.vx-check input { width: 16px; margin: 0 8px 0 0; vertical-align: -2px; }
+.vx-check a { color: var(--vb); }
+.vx-btn:disabled { opacity: .45; cursor: not-allowed; }

@@ -28,26 +28,28 @@ Strata is a shared design workspace with one AI teammate that lives in the file.
 - **Catch me up:** a summary of what teammates and the AI changed since you last looked.
 
 ## Visa · The Future of Shopping
-Strata's checkout simulates **Visa Intelligent Commerce** end to end (Visa offered no sandbox and asked teams to
-simulate):
+Checkout simulates **Visa Click to Pay** (EMVCo Secure Remote Commerce) following Visa's Click to Pay SDK flow
+(Visa offered no sandbox and asked teams to simulate). Strata acts as the Digital Terminal and DCF
+(merchant-orchestrated checkout); the asset store is the DPA.
 - **Discovery and personalization:** CREAO ranks illustrations, icon sets and background patterns for whichever
   element you're working on, by what this team keeps and undoes; every pick names the rule and who taught it.
-- **Decision-making:** try any asset on the real page (hero art, background, icons, section art), compare three
-  license tiers, see your remaining limit before you commit.
-- **Checkout:** a Visa checkout sheet shows the merchant, order, card, and the **agent token** Strata pays with
-  (created by the lead with a Visa Payment Passkey) plus its **spend controls**: monthly limit, allowed license
-  tiers, design assets only, expiry. Over a control, the lead approves that one purchase.
-- **Payments:** the buyer confirms with a **passkey**; the merchant verifies Strata's **signed agent intent**
-  (Trusted Agent Protocol); the agent token is used with a one-time cryptogram; risk check; issuer response `00`
-  with auth code and Visa transaction ID. Spend controls are re-checked at authorization and decline with real
-  response codes (`61` exceeds spend control, `57` not permitted, `54` expired instruction). Double-submits are
-  idempotent.
+- **Decision-making:** try any asset on the real page, compare three license tiers, see your remaining team
+  limit before paying.
+- **Checkout (Click to Pay):** `init` → `isRecognized` → `identityLookup` (email) → one-time code
+  (`initiate/completeIdentityValidation`) → `getSrcProfile` masked card list (usable cards first, ineligible
+  billing countries flagged) → review with "Remember me" and the Visa Click to Pay Terms and Privacy Notice →
+  `checkout`, with risk-based cardholder step-up (`authenticate`, passkey) for higher-risk purchases. Returning
+  users are recognized and go straight to their cards.
+- **Payments:** the merchant gets a Visa token and a `CARD_APPLICATION_CRYPTOGRAM_LONG_FORM` (TAVV), never the
+  card number, and authorizes through VisaNet (response `00`, approval code, ECI 07, or 05 after step-up).
+- **Team spending rules:** before anything is sent to Visa, Strata checks the buyer's monthly limit, allowed
+  license tiers and expiry set by the lead; over a rule, the lead approves that one purchase.
 - **Post-purchase:** each license is tied to the elements it covers, with an export guard for client work and
   one-click upgrades priced as the difference.
-- **Trust and responsibility:** nothing is charged without review and a passkey; the AI agents never receive card
-  data (a "What Strata saw" box lists exactly what each agent was sent); every recommendation and edit carries its
-  reason; the AI can't override a teammate's locked decision.
-- **Commerce impact:** buyers see the asset in context before paying (more confident purchases, fewer refunds);
+- **Trust and responsibility:** nothing is charged without review, consent and identity verification; the AI
+  agents never receive card data (a "What Strata saw" box lists exactly what each agent was sent); one-time codes,
+  ID tokens and recognition tokens stay server-side; every recommendation and edit carries its reason.
+- **Commerce impact:** buyers see the asset in context before paying; returning buyers check out in two taps;
   creators sell inside the tool where the decision happens; teams stop shipping unlicensed assets.
 
 ## CREAO · AI-First Disruptor

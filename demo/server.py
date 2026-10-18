@@ -54,7 +54,7 @@ def load() -> dict:
 
 
 S = load()
-if "agent_token" not in S.get("payment_method", {}):
+if "cards" not in S.get("payment_method", {}):
     S["payment_method"] = payment_method()
 
 
@@ -101,8 +101,12 @@ def index():
 
 @app.get("/api/state")
 def state():
-    pm = {k: v for k, v in S["payment_method"].items() if k != "token"}  # the browser never sees the token
-    return {**S, "payment_method": pm, "modes": {k: agents.mode(k) for k in agents.ROLES},
+    pm = {"brand": "Visa", "cards": [{k: c[k] for k in ("panLastFour", "presentationName")}
+                                     for c in S["payment_method"]["cards"]]}  # the browser never sees tokens or MRTs
+    hide = ("code", "idToken")  # one-time codes and ID tokens stay server-side
+    carts = {k: {**c, "src": {x: y for x, y in c["src"].items() if x not in hide}} if c.get("src") else c
+             for k, c in S["carts"].items()}
+    return {**S, "carts": carts, "payment_method": pm, "modes": {k: agents.mode(k) for k in agents.ROLES},
             "payments": "visa-simulated", "licence_labels": LICENCE_LABELS, "editable": EDITABLE,
             "export": export_check(), "today": date.today().isoformat()}
 
@@ -585,80 +589,210 @@ def controls_for(cart: dict) -> list[dict]:
     ]
 
 
-@app.post("/api/cart/{cart_id}/checkout")
-def checkout(cart_id: str, who: Who):
-    """Open a simulated Visa checkout: what the buyer sees before confirming with a passkey."""
-    cart = cart_of(cart_id)
-    if who.member != cart["member"]:
-        raise HTTPException(403, f"Only {cart['member']} can pay for this; it's on their limit")
-    if cart["status"] not in ("ready", "paid"):
-        raise HTTPException(409, "This cart isn't ready to pay")
-    pm, a = S["payment_method"], asset(cart["asset_id"])
-    if not cart.get("checkout"):
-        cart["checkout"] = {
-            "merchant": "Strata Asset Store", "seller": a["creator"],
-            "lines": [{"label": f"{a['title']} · {cart['licence']} license", "cents": cart["amount_cents"]},
-                      {"label": "Tax (digital goods, simulated)", "cents": 0}],
-            "intent": {"agent": "Strata", "action": "purchase", "item": a["title"], "for": cart["member"],
-                       "signature": "tap_" + secrets.token_hex(6), "valid_minutes": 8},
-            "opened": agents.now()}
-        save()
-    card = {k: pm[k] for k in ("brand", "product", "last4", "holder", "expiry")}
-    return {"cart": cart, "card": card, "agent_token": pm["agent_token"], "controls": controls_for(cart)}
+# ---------------------------------------------------------------- Visa Click to Pay (EMVCo SRC), simulated
+# Mirrors the Click to Pay SDK flow from developer.visa.com: init → isRecognized → identityLookup →
+# initiateIdentityValidation → completeIdentityValidation → getSrcProfile → checkout (→ authenticate on step-up) →
+# DPA fetches the payment payload (Visa token + TAVV cryptogram) → authorization. Strata is the Digital Terminal
+# and DCF (merchant-orchestrated checkout); "Strata Asset Store" is the DPA. Nothing real is charged.
+
+DPA = {"srciDpaId": "dpa_strata_asset_store", "srcInitiatorId": "srci_strata", "dpaName": "Strata Asset Store",
+       "dpaAcceptedBillingCountries": ["US"]}
+TERMS = "https://www.visa.com/en_US/checkout/legal/terms-of-service.html"
+PRIVACY = "https://www.visa.com/en_US/checkout/legal/global-privacy-notice.html"
 
 
-class PayIn(BaseModel):
+class Src(BaseModel):
     member: str
-    passkey: bool = False
+    email: str = ""
+    code: str = ""
+    card: str = ""
+    remember: bool = True
+    consent: bool = False
 
 
-@app.post("/api/cart/{cart_id}/pay")
-async def pay(cart_id: str, body: PayIn):
+def src_of(cart_id: str, body: Src) -> dict:
     cart = cart_of(cart_id)
     if body.member != cart["member"]:
         raise HTTPException(403, f"Only {cart['member']} can pay for this; it's on their limit")
-    if cart["status"] in ("paid", "paying"):  # idempotent: a double click never charges twice
-        return cart
-    if cart["status"] != "ready" or not cart.get("checkout"):
-        raise HTTPException(409, "Open the Visa checkout first")
-    if not body.passkey:
-        raise HTTPException(401, "Confirm with your passkey to pay")
-    pm, now = S["payment_method"], agents.now()
-    failed = next((c for c in controls_for(cart) if not c["ok"]), None)
-    if failed:  # spend controls are re-checked at authorization: limits may have changed since the cart was made
-        code, text = DECLINE_CODES.get(failed["code"], ("05", "Do not honor"))
-        cart.update(status="declined", auth={"approved": False, "response_code": code, "response": text,
-                                             "steps": [{"t": "Passkey verified", "ok": True},
-                                                       {"t": "Spend controls", "ok": False, "x": failed["label"]}]})
-        cart["trail"].append({"step": "Payment", "ok": False, "at": now,
-                              "text": f"Declined by Visa spend control · {code} {text}"})
-        save()
-        raise HTTPException(402, f"Declined · {code} {text}. Ask {S['mandates'][cart['member']]['set_by']} to approve.")
-    cart["status"] = "paying"
-    save()
-    await asyncio.sleep(1.0)  # simulated authorization round trip; nothing real is charged
-    auth = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
-    txn = "".join(secrets.choice(string.digits) for _ in range(15))
-    high = cart["amount_cents"] > 5000 or bool(cart.get("approved_by"))
-    tok = pm["agent_token"]["last4"]
-    steps = [
-        {"t": "Passkey verified", "ok": True, "x": f"{cart['member']} confirmed with Visa Payment Passkey on this device"},
-        {"t": "Trusted agent verified", "ok": True,
-         "x": f"Strata Asset Store checked Strata's signed intent {cart['checkout']['intent']['signature']}"},
-        {"t": "Spend controls passed", "ok": True, "x": " · ".join(c["label"] for c in controls_for(cart)[:2])},
-        {"t": "Agent token + cryptogram", "ok": True,
-         "x": f"Agent token •••• {tok} with a one-time cryptogram; the card number is never shared"},
-        {"t": "Risk check", "ok": True, "x": "Higher amount · passkey counts as strong authentication" if high
-         else "Low risk · no extra challenge"},
-        {"t": "Issuer approved", "ok": True, "x": f"Response 00 · auth {auth} · Visa transaction {txn}"},
-    ]
-    cart.update(auth_code=auth, network_token=f"•••• {tok}",
-                auth={"approved": True, "response_code": "00", "response": "Approved", "auth_code": auth,
-                      "txn_id": txn, "token_last4": tok, "card_last4": pm["last4"], "at": now, "steps": steps})
-    cart["trail"].append({"step": "Payment", "at": now,
-                          "text": f"Visa •••• {pm['last4']} via agent token •••• {tok} · 00 approved · auth {auth}"})
-    fulfil(cart)
     return cart
+
+
+def mask_email(e: str) -> str:
+    name, _, dom = e.partition("@")
+    return f"{name[:1]}***@{dom}"
+
+
+def masked_cards() -> list[dict]:
+    cards = []
+    for c in S["payment_method"]["cards"]:
+        ok = c["billingCountry"] in DPA["dpaAcceptedBillingCountries"]
+        cards.append({k: c[k] for k in ("srcDigitalCardId", "panLastFour", "panExpirationMonth", "panExpirationYear",
+                                         "presentationName", "holder", "dateOfCardLastUsed")} |
+                     {"usable": ok, "reason": "" if ok else "Billing country isn't accepted by this merchant"})
+    # usable first, then by last use (as Visa recommends)
+    return sorted(cards, key=lambda c: (not c["usable"], c["dateOfCardLastUsed"] is None, c["dateOfCardLastUsed"] or ""))
+
+
+def src_view(cart: dict) -> dict:
+    src = cart["src"]
+    out = {"cart": cart, "screen": src["screen"], "maskedValidationChannel": src.get("maskedValidationChannel"),
+           "email": src.get("email"), "dpa": DPA, "terms": TERMS, "privacy": PRIVACY,
+           "rules": controls_for(cart), "steps": src.get("steps", []), "simulatedCode": src.get("code")}
+    if src["screen"] in ("cards", "review", "authenticate"):
+        out["maskedCards"] = masked_cards()
+        out["selected"] = src.get("card")
+    return out
+
+
+def src_step(cart: dict, t: str, x: str = "", ok: bool = True) -> None:
+    cart["src"].setdefault("steps", []).append({"t": t, "x": x, "ok": ok})
+
+
+@app.post("/api/cart/{cart_id}/src/init")
+def src_init(cart_id: str, body: Src):
+    """init() + isRecognized(): open Click to Pay after Strata checks the team's spending rules."""
+    cart = src_of(cart_id, body)
+    if cart["status"] not in ("ready", "paid"):
+        raise HTTPException(409, "This cart isn't ready to pay")
+    if cart["status"] == "paid":
+        return src_view(cart)
+    mrt = S["payment_method"]["recognition"].get(cart["member"])
+    cart["src"] = {"srciTransactionId": str(uuid.uuid4()), "steps": [],
+                   "dpaTransactionOptions": {"transactionAmount": {"transactionAmount": cart["amount_cents"] / 100,
+                                                                   "transactionCurrencyCode": "USD"},
+                                             "dpaLocale": "en_US", "dpaShippingPreference": "NONE",
+                                             "paymentOptions": [{"dynamicDataType": "CARD_APPLICATION_CRYPTOGRAM_LONG_FORM"}],
+                                             "customInputData": {"checkoutOrchestrator": "merchant"}},
+                   "screen": "cards" if mrt else "lookup", "recognized": bool(mrt),
+                   "email": S["payment_method"]["consumers"].get(cart["member"], "")}
+    if mrt:
+        cart["src"]["idToken"] = "idt_" + secrets.token_hex(8)
+    save()
+    return src_view(cart)
+
+
+@app.post("/api/cart/{cart_id}/src/lookup")
+def src_lookup(cart_id: str, body: Src):
+    """identityLookup() then initiateIdentityValidation(): Visa sends a one-time code."""
+    cart = src_of(cart_id, body)
+    email = body.email.strip().lower()
+    if email not in S["payment_method"]["consumers"].values():
+        raise HTTPException(404, "No Click to Pay profile for that email. Try your work email.")
+    code = "".join(secrets.choice(string.digits) for _ in range(6))
+    cart["src"].update(email=email, code=code, attempts=0, screen="otp", maskedValidationChannel=mask_email(email))
+    save()
+    return src_view(cart)
+
+
+@app.post("/api/cart/{cart_id}/src/validate")
+def src_validate(cart_id: str, body: Src):
+    """completeIdentityValidation(): the code returns an ID token; getSrcProfile() then lists masked cards."""
+    cart = src_of(cart_id, body)
+    src = cart["src"]
+    if src.get("screen") != "otp":
+        raise HTTPException(409, "Ask for a code first")
+    src["attempts"] = src.get("attempts", 0) + 1
+    if body.code.strip() != src.get("code"):
+        if src["attempts"] >= 3:
+            src.update(screen="lookup", code=None)
+            save()
+            raise HTTPException(429, "Too many wrong codes. Start again.")
+        save()
+        raise HTTPException(400, "That code didn't match. Check the latest code.")
+    src.update(idToken="idt_" + secrets.token_hex(8), screen="cards", code=None)
+    save()
+    return src_view(cart)
+
+
+@app.post("/api/cart/{cart_id}/src/select")
+def src_select(cart_id: str, body: Src):
+    cart = src_of(cart_id, body)
+    if not cart["src"].get("idToken"):
+        raise HTTPException(401, "Verify your identity first")
+    card = next((c for c in masked_cards() if c["srcDigitalCardId"] == body.card), None)
+    if not card or not card["usable"]:
+        raise HTTPException(400, "This card can't be used here")
+    cart["src"].update(card=body.card, screen="review")
+    save()
+    return src_view(cart)
+
+
+async def authorize(cart: dict, authenticated: bool) -> dict:
+    """The DPA fetches the full payment payload by reference and authorizes through VisaNet (simulated)."""
+    src, now = cart["src"], agents.now()
+    card = next(c for c in S["payment_method"]["cards"] if c["srcDigitalCardId"] == src["card"])
+    corr = str(uuid.uuid4())
+    src_step(cart, "Checkout complete", f"dcfActionCode COMPLETE · transaction reference {corr[:13]}…")
+    await asyncio.sleep(0.6)
+    crypt = "CARD_APPLICATION_CRYPTOGRAM_LONG_FORM (TAVV)" + (" + CARDHOLDER_AUTHENTICATION_CRYPTOGRAM" if authenticated else "")
+    src_step(cart, "Payment payload retrieved", f"Visa token •••• {card['tokenLastFour']} · {crypt} · card number never shared")
+    await asyncio.sleep(0.6)
+    approval = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+    txn = "".join(secrets.choice(string.digits) for _ in range(15))
+    src_step(cart, "Authorized through VisaNet", f"Response 00 Approved · approval code {approval} · ECI {'05' if authenticated else '07'}")
+    cart.update(auth_code=approval, network_token=f"•••• {card['tokenLastFour']}",
+                auth={"approved": True, "response_code": "00", "auth_code": approval, "txn_id": txn,
+                      "srcCorrelationId": corr, "token_last4": card["tokenLastFour"], "card_last4": card["panLastFour"],
+                      "card_name": card["presentationName"], "authenticated": authenticated, "at": now})
+    src["screen"] = "approved"
+    cart["trail"].append({"step": "Payment", "at": now,
+                          "text": f"Visa Click to Pay · {card['presentationName']} •••• {card['panLastFour']} · token •••• "
+                                  f"{card['tokenLastFour']} · 00 approved · {approval}"})
+    fulfil(cart)
+    return src_view(cart)
+
+
+@app.post("/api/cart/{cart_id}/src/checkout")
+async def src_checkout(cart_id: str, body: Src):
+    """checkout(): Click to Pay may ask for cardholder step-up based on risk; otherwise completes."""
+    cart = src_of(cart_id, body)
+    if cart["status"] == "paid":
+        return src_view(cart)
+    src = cart["src"]
+    if src.get("screen") not in ("review",) or cart["status"] != "ready":
+        raise HTTPException(409, "Review the payment first")
+    if not body.consent:
+        raise HTTPException(400, "Agree to the Visa Click to Pay Terms to continue")
+    failed = next((c for c in controls_for(cart) if not c["ok"]), None)
+    if failed:  # Strata's spending rules are re-checked before anything is sent to Visa
+        code, text = DECLINE_CODES.get(failed["code"], ("05", "Do not honor"))
+        cart["status"] = "declined"
+        src.update(screen="declined")
+        src_step(cart, "Stopped by Tally's spending rule", f"{failed['label']} · not sent to Visa", ok=False)
+        cart["trail"].append({"step": "Payment", "ok": False, "at": agents.now(), "text": f"Stopped before Visa: {failed['label']}"})
+        save()
+        raise HTTPException(402, f"Stopped by Tally's spending rule: {failed['label']}. Ask {S['mandates'][cart['member']]['set_by']}.")
+    if body.remember:
+        S["payment_method"]["recognition"][cart["member"]] = "mrt_" + secrets.token_hex(8)
+    cart["status"] = "paying"
+    risky = cart["amount_cents"] > 5000 or bool(cart.get("approved_by"))
+    if risky:  # risk-based step-up: Click to Pay asks the cardholder to authenticate
+        src.update(screen="authenticate")
+        src_step(cart, "Step-up requested", "Higher-risk purchase: Visa asks the cardholder to verify")
+        save()
+        return src_view(cart)
+    save()
+    return await authorize(cart, authenticated=False)
+
+
+@app.post("/api/cart/{cart_id}/src/authenticate")
+async def src_authenticate(cart_id: str, body: Src):
+    """authenticate(): cardholder verifies (passkey); then the checkout completes."""
+    cart = src_of(cart_id, body)
+    if cart["status"] == "paid":
+        return src_view(cart)
+    if cart["src"].get("screen") != "authenticate":
+        raise HTTPException(409, "No verification pending")
+    src_step(cart, "Cardholder verified", "Passkey on this device (Visa Secure, simulated)")
+    return await authorize(cart, authenticated=True)
+
+
+@app.post("/api/cart/{cart_id}/src/forget")
+def src_forget(cart_id: str, body: Src):
+    """unbindAppInstance(): forget this browser for Click to Pay."""
+    S["payment_method"]["recognition"].pop(member_ok(body.member), None)
+    save()
+    return {"ok": True}
 
 
 def fulfil(cart: dict) -> None:
@@ -671,11 +805,11 @@ def fulfil(cart: dict) -> None:
            [f"Suggested by Strata from a team rule ({team_rule_people()})", f"tried on by {m}"] if cart.get("suggested")
            else [f"Picked by {m}", f"tried on by {m}"])
     how += ([f"approved by {cart['approved_by']}"] if cart.get("approved_by") else []) + \
-        [f"confirmed with a Visa passkey, paid by agent token (simulated)", f"placed on the {el['name'].lower()}"]
+        ["paid with Visa Click to Pay (simulated)", f"placed on the {el['name'].lower()}"]
     lic = {"licence_id": f"L-{uuid.uuid4().hex[:4].upper()}", "asset_id": cart["asset_id"],
            "tier": cart["licence"], "element_keys": [cart["element_key"]], "member": m,
            "amount_cents": cart["amount_cents"] + (old["amount_cents"] if old else 0), "paid_cents": cart["amount_cents"],
-           "payment_ref": cart["auth_code"], "card": f"Visa {pm['last4']}", "network_token": cart["network_token"],
+           "payment_ref": cart["auth_code"], "card": f"Visa {cart.get('auth', {}).get('card_last4', '')}", "network_token": cart["network_token"],
            "status": "active", "at": now, "how": how}
     for l in S["licences"]:  # a higher license for the same asset and element supersedes lower ones
         if l["status"] == "active" and l["asset_id"] == lic["asset_id"] and cart["element_key"] in l["element_keys"] \
@@ -689,7 +823,7 @@ def fulfil(cart: dict) -> None:
     el.update(authorship="human", last_author=m)
     atom(element_key=el["key"], kind="purchase", actor="human", author=m,
          summary=f"Bought {cart['title']} · {cart['licence']} license · {money(cart['amount_cents'])} "
-                 f"with Visa ending {pm['last4']}")
+                 f"with Visa Click to Pay (•••• {cart.get('auth', {}).get('card_last4', '')})")
     cart.update(status="paid", licence_id=lic["licence_id"])
     cart["trail"].append({"step": "Receipt", "text": f"License {lic['licence_id']} filed against the {el['name'].lower()}",
                           "at": now})
