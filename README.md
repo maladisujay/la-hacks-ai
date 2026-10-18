@@ -8,7 +8,7 @@ silently override a teammate, and lets the team try and buy design assets direct
 inside a spending limit, with every licence tied to the elements that use it.
 
 Built for LA Hacks AI Hackathon 2026 · Base44 "Build Something People Want" · Visa "The Future of Shopping" ·
-Paper "Best Designed Hack" · main track: Applied Intelligence.
+Paper "Best Designed Hack" · CREAO "AI-First Disruptor" · main track: Applied Intelligence.
 
 ![Workspace and Provenance Lens](design/screens/01-workspace-provenance-lens.png)
 
@@ -21,6 +21,9 @@ Paper "Best Designed Hack" · main track: Applied Intelligence.
 | `design/assets/` | Original illustrations and icon sets sold in the demo catalog (drawn by us) |
 | `base44/BASE44_BRIEF.md` | The step-by-step prompts used to build the app in Base44, plus submission text |
 | `base44/entities/` | Entity schemas for the Base44 app |
+| `base44/CREAO_BRIEF.md` | The three CREAO agents (Curator, Teammate, Catch-up): specs, setup, wiring |
+| `base44/functions/runAgent.ts`, `creaoWebhook.ts` | Base44 functions that start CREAO runs and receive their results |
+| `scripts/run_creao.py` | Start a CREAO agent run from the command line |
 | `base44/functions/agentApi.ts` | Backend function contract for external agents (optional) |
 | `docs/Strata_Project_Brief.pdf` | Project brief: problem, features, method |
 | `strata_agents/` | Prototype: multi-agent ASI:One shopping flow (Fetch.ai uAgents + LangGraph). Not part of this submission |
@@ -35,6 +38,26 @@ Paper "Best Designed Hack" · main track: Applied Intelligence.
 | Review and pay | Licence choice, the buyer's spending limit, intent → cart → payment → receipt trail |
 | Licences and export guard | Each licence tied to its elements; personal-use assets flagged before client export |
 | Team rules | What Strata learned, who taught it, team vs personal vs split |
+
+## CREAO agents
+
+The AI in Strata is three CREAO agents. Base44 holds the UI, data and payments; the agents do the reasoning
+and write their results back into Base44, which the app shows live.
+
+| Agent | Agent ID | What it does |
+| --- | --- | --- |
+| Strata Curator | `<agent id>` | Ranks the catalog against the team's learned taste, licence and spending limit; writes the shop shortlist |
+| Strata Teammate | `<agent id>` | Edits one element, records its reason in the element's history, opens a conflict instead of undoing a locked choice |
+| Strata Catch-up | `<agent id>` | Summarises what teammates and the AI changed since you last looked |
+
+Example agent run: `<share link>`
+
+Remove the agents and Strata stops working: the shop has no shortlist, the AI can't edit or explain, and
+nobody gets caught up.
+
+```
+Base44 UI → runAgent → CREAO API trigger → agent reads/writes Base44 entities → creaoWebhook → live UI
+```
 
 ## Design language
 

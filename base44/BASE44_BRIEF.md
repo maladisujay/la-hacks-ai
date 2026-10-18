@@ -6,7 +6,8 @@ After each prompt: click through the result, and if something works, **freeze th
 (More options → Freeze Files) before the next prompt. If a prompt breaks something, use **Revert**,
 don't argue with it in chat.
 
-Time box (deadline 12:00): Prompt 1 → 20 min · 2 → 30 min · 3 → 25 min · 4 → 35 min · 5 → 15 min · submit at 11:30.
+Time box (deadline 12:00): Prompt 1 → 20 min · 2 → 30 min · 3 → 25 min · 4 → 35 min · 5 → 15 min ·
+6 (CREAO) → 15 min · submit at 11:30. Build the CREAO Curator agent in parallel while Base44 generates.
 
 ---
 
@@ -125,6 +126,36 @@ Time box (deadline 12:00): Prompt 1 → 20 min · 2 → 30 min · 3 → 25 min �
 > the sample page, mono numbers, the legend at the bottom of the layers rail ("Drafted by Strata, in pencil" /
 > "Inked by a person"). Add a small **Reset demo** link in the top bar that restores the seed data.
 
+## Prompt 6 · CREAO wiring  (after the CREAO agents exist, see `CREAO_BRIEF.md`)
+
+> The AI work in Strata is done by external **CREAO agents** that read and write this app's entities. Add:
+> - **Shortlist**: spot_key, member_name, asset_id, rank (number), score (number), why, fits (list),
+>   breaks (list), price_cents.
+> - **AgentRun**: kind (curate | teammate | catchup), status (queued | running | completed | failed), run_id,
+>   inputs (object), result_text, member_name.
+> - **CatchUp**: member_name, lines (list), open_questions (number).
+>
+> Add two backend functions with exactly the code I paste next: `runAgent` and `creaoWebhook`.
+> Change the UI so it shows the agents' output, not its own logic:
+> - **Shop**: "Find assets for this slot" calls `runAgent` with kind "curate" and inputs { file_slug:
+>   "fintech-landing", spot_key, budget_usd, licence } for the "Viewing as" member. The shop list shows
+>   **Shortlist** rows for that spot and member ordered by rank (asset image, title, price, `why`, fits/breaks
+>   chips). Remove any ranking done in the frontend.
+> - **AI teammate box**: sending a request calls `runAgent` with kind "teammate" and inputs { element_key,
+>   request }. The element, Provenance Lens and conflict card already update from the entities.
+> - **Catch-up**: shows the latest **CatchUp** row for the member; "Refresh" calls `runAgent` kind "catchup".
+> - **Progress**: while the member's latest AgentRun is queued or running, show one quiet line under the
+>   control in dashed-blue AI style: "Strata is working on this… (CREAO agent, usually 1–3 min)", with a small
+>   mono "run abc123" and no spinner animation. On completed show `result_text` for 6 s; on failed show
+>   "The agent couldn't finish. Try again." Subscribe to AgentRun, Shortlist, CatchUp, DesignElement,
+>   HistoryAtom and Conflict so changes appear live.
+> - **Reset demo** also clears Shortlist, AgentRun and CatchUp.
+> - Keep the app's **login required** (Base44 sign-in): `runAgent` refuses signed-out visitors so nobody can
+>   spend our CREAO credits. The "Viewing as" switcher stays as it is after sign-in.
+
+Then paste `base44/functions/runAgent.ts` and `base44/functions/creaoWebhook.ts`, add the secrets listed in
+`CREAO_BRIEF.md` (Dashboard → Settings → Secrets), and **publish** so the functions go live.
+
 ## If something goes wrong
 
 - Generic look creeping in → "Use only the design system from the first prompt: no shadows, no gradients,
@@ -158,11 +189,19 @@ Trust is designed in: nothing is charged without a review step or above a limit,
 which rule and which teammates it came from, and the paper trail (intent → cart → payment → receipt) is
 visible. Payments run on Stripe test mode with a Visa test card.
 
+**CREAO: AI-First Disruptor.** The reasoning in Strata is done by CREAO agents, not the app. The Curator
+agent reads the team's learned rules, the buyer's spending limit and the catalog from our Base44 database,
+ranks the assets and writes the shortlist back; the Teammate agent edits one element at a time, writes its
+reason into the element's history, and opens a conflict card instead of undoing a locked choice; the Catch-up
+agent summarises what changed for each person. Remove the agents and Strata has no shop shortlist, no AI
+edits and no catch-up. Agent run: <share link> · Agent IDs: Curator <id>, Teammate <id>, Catch-up <id>.
+
 **Paper: Best Designed Hack.** Every screen was designed by hand in Paper first ("drafting table" system:
 the AI drafts in dashed blue pencil, people ink in solid) and then built in Base44 from those designs.
 Paper file: <link> · screens in `design/screens/`.
 
 **What we learned / changed.** We started with a multi-agent chat version on Fetch.ai, then cut it to put
-the time into the product people would actually use: the shared workspace. We moved from serif headings to a
+the time into the product people would actually use: the shared workspace, with CREAO agents doing the
+reasoning behind it. We moved from serif headings to a
 plain humanist sans after feedback that serifs read as "AI-generated", and we separated the sample client
 site's brand from Strata's own UI so the two never blur. <add on-site user test notes here>
