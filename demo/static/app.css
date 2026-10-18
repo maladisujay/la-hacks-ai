@@ -333,3 +333,8 @@ button:focus-visible, input:focus-visible, [data-sel]:focus-visible, [data-try]:
 .s-apps .dash { width: 20px; height: 20px; border: 1.25px dashed var(--ai-stroke); border-radius: 4px; display: inline-block; }
 .s-apps.trying { outline: 1.5px solid #C9B63A; outline-offset: 3px; border-radius: 8px; }
 .s-flinks { grid-column: 1 / -1; font-size: 12px; color: #6B7590; }
+.mg { margin-top: 10px; padding: 10px 12px; background: var(--ai-fill); border: 1.25px dashed var(--ai-stroke); border-radius: 4px; color: var(--ai-text); }
+.mg-k { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 4px; }
+.mg b { color: var(--ai-text); } .mg-on { font-size: 12.5px; }
+.mg-why { font-style: italic; font-size: 13px; margin: 4px 0 8px; }
+.mg .btn { background: var(--board); }

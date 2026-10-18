@@ -62,7 +62,9 @@ SHAPE = {
               '"fits": ["rule text"], "breaks": ["rule text"]}]}',
     "teammate": '{"action": "edit|conflict|decline", "props": {"prop": "new value"}, "reason": "<one sentence, max 25 words>", '
                 '"summary": "<what changed, max 10 words>", "prop": "locked prop if conflict", "wants": "wanted value if conflict", '
-                '"rule_ids": ["..."]}',
+                '"rule_ids": ["..."], "middle_ground": {"element_key": "<an element from other_elements or this one>", '
+                '"props": {"prop": "new value, never a locked prop"}, "summary": "<what it changes, max 12 words>", '
+                '"why": "<one sentence: how it gives the asker what they wanted while keeping the locked decision>"}}',
     "catchup": '{"lines": ["<max 5 lines, max 16 words each>"], "question": "<one short question or empty>"}',
 }
 NEEDS = {"curate": "shortlist", "teammate": "action", "catchup": "lines"}
@@ -70,7 +72,10 @@ NEEDS = {"curate": "shortlist", "teammate": "action", "catchup": "lines"}
 
 def contract(kind: str, request: str) -> str:
     """Appended to every request: the app reads this exact JSON, whatever the agent's report style."""
-    extra = (" Only score a rule against an asset if the rule's applies_to list includes spot.kind (rules with an "
+    extra = (" If the change would touch a locked prop, reply action conflict AND propose a middle_ground: the smallest "
+             "change to an unlocked prop (on this element or one in other_elements) that gives the asker what they "
+             "wanted without overriding the lock; use the team's rules and history. Omit middle_ground otherwise."
+             if kind == "teammate" else "") + (" Only score a rule against an asset if the rule's applies_to list includes spot.kind (rules with an "
              "empty applies_to apply to everything)." if kind == "curate" else "")
     return (f"{request}{extra}\n\nOUTPUT CONTRACT (the Strata app parses this): end your reply with exactly one JSON "
             f"object in this shape, every field filled, inside a ```json block, and also save it as result.json: "
@@ -247,7 +252,10 @@ def offline_teammate(request: str, ctx: dict) -> dict:
         if "color" in el["locked_props"]:
             return {"action": "conflict", "props": {}, "prop": "color", "wants": "warm charcoal #3A3632",
                     "reason": f"{el['locked_by']} locked this colour, so I'm asking instead of changing it.",
-                    "summary": "", "rule_ids": ["r-navy"]}
+                    "summary": "", "rule_ids": ["r-navy"],
+                    "middle_ground": {"element_key": "hero_subcopy", "props": {"color": "#6B4E3D"},
+                                      "summary": "Subcopy to warm brown; heading stays navy",
+                                      "why": "Warmth comes from the supporting text, so Priya's navy heading stays."}}
         return {"action": "edit", "props": {"color": "#3A3632"}, "reason": "Warmer, still dark enough to read.",
                 "summary": "Colour → warm charcoal", "rule_ids": []}
     if "font_size" in props and any(w in q for w in ("bigger", "premium", "bold", "heavier", "stronger")):

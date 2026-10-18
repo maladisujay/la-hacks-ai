@@ -207,7 +207,11 @@ def context_for(kind: str, ask: AgentAsk) -> dict:
                  "undone_by": h.get("undone_by")} for h in S["history"] if h["element_key"] == el["key"]][-8:]
         return {"member": m,
                 "element": {k: el[k] for k in ("key", "name", "kind", "props", "locked_props", "locked_by")},
-                "editable_props": EDITABLE[el["kind"]], "history": hist, "rules": rules_view()}
+                "editable_props": EDITABLE[el["kind"]], "history": hist, "rules": rules_view(),
+                "other_elements": [{"key": o["key"], "name": o["name"], "kind": o["kind"], "props": {
+                    k: v for k, v in o["props"].items() if k in EDITABLE[o["kind"]]}, "editable_props": EDITABLE[o["kind"]],
+                    "locked_props": o["locked_props"]} for o in S["elements"].values()
+                    if o["key"] != el["key"] and EDITABLE[o["kind"]] and o["kind"] != "nav"]}
     since = S["last_seen"].get(m, "")
     events = [{"who": h["author"], "actor": h["actor"], "on_behalf_of": h.get("on_behalf_of"),
                "element": S["elements"][h["element_key"]]["name"], "summary": h["summary"],
@@ -335,6 +339,14 @@ def apply_teammate(run: dict, reply: dict) -> None:
              "reason": reply.get("reason", ""), "status": "open", "at": agents.now(),
              "rule_ids": reply.get("rule_ids") or [],
              "question": f"{m} wants {prop} {wants}; {el['locked_by']} locked it. Keep or change?"}
+        mg = reply.get("middle_ground") if isinstance(reply.get("middle_ground"), dict) else None
+        target = S["elements"].get((mg or {}).get("element_key") or "")
+        if mg and target:
+            mprops = {k: v for k, v in clean_props(target, mg.get("props") or {}).items() if k not in target["locked_props"]}
+            if mprops:
+                c["suggestion"] = {"element_key": target["key"], "element": target["name"], "props": mprops,
+                                   "before": {k: target["props"].get(k) for k in mprops},
+                                   "summary": str(mg.get("summary") or "")[:120], "why": str(mg.get("why") or "")[:240]}
         S["conflicts"].append(c)
         atom(element_key=el["key"], kind="conflict", actor="ai", author="Strata", on_behalf_of=m,
              summary=f"Stopped: would change {el['locked_by']}'s locked {PROP_NAME.get(prop, prop)}", ai_reason=c["reason"],
@@ -413,6 +425,28 @@ def resolve(cid: str, who: Who):
     if not c or c["status"] not in ("open", "asked"):
         raise HTTPException(409, "already resolved")
     el = element(c["element_key"])
+    if who.choice == "middle":
+        sg = c.get("suggestion")
+        if not sg:
+            raise HTTPException(409, "Strata didn't suggest a middle ground for this one")
+        if m not in (c["locked_by"], c["member"], "Priya"):
+            raise HTTPException(403, f"Only {c['member']} or {c['locked_by']} can accept this")
+        target = element(sg["element_key"])
+        if any(k in target["locked_props"] for k in sg["props"]):
+            raise HTTPException(409, "That middle ground now touches a locked choice")
+        before = {k: target["props"].get(k) for k in sg["props"]}
+        target["props"].update(sg["props"])
+        target.update(authorship="ai", last_author=f"Strata for {c['member']} and {c['locked_by']}")
+        atom(element_key=target["key"], kind="edit", actor="ai", author="Strata",
+             on_behalf_of=f"{c['member']} & {c['locked_by']}", summary=f"Middle ground: {sg['summary'] or 'applied'}",
+             ai_reason=sg["why"], before=before, after=sg["props"], status="proposed", rule_ids=c.get("rule_ids", []),
+             request=c.get("request"))
+        atom(element_key=c["element_key"], kind="lock", actor="human", author=m,
+             summary=f"Accepted Strata's middle ground; the {PROP_NAME.get(c['prop'], c['prop'])} stays locked")
+        c.update(status="resolved", resolved_by=m)
+        bump(c.get("rule_ids", []), "kept")
+        save()
+        return {"ok": True}
     if who.choice == "ask":
         c["status"] = "asked"
         atom(element_key=el["key"], kind="prompt", actor="human", author=m,

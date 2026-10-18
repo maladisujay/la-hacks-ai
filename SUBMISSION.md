@@ -15,8 +15,10 @@ inbox, so personal-use assets slip into client work.
 Strata is a shared design workspace with one AI teammate that lives in the file.
 - **Provenance Lens:** click any element to see who changed it, human or AI, on whose request, and the AI's
   stated reason. The AI drafts in dashed blue pencil; people ink in solid.
-- **AI teammate:** ask for a change in plain words. It edits one element, explains why, and **refuses to undo a
-  teammate's locked decision**: it opens a conflict card naming both people instead. Keep or Undo on every AI
+- **AI teammate and conflict resolution:** ask for a change in plain words. It edits one element and explains
+  why. When the change would undo a teammate's locked decision, it **stops**, opens a conflict card naming both
+  people, and proposes a **middle ground** from the team's rules and history (e.g. "warm the subcopy, keep Priya's
+  navy heading"). Either teammate accepts it in one click; it's recorded for both and the team rules learn from it. Keep or Undo on every AI
   edit teaches it the team's taste (team, personal and split rules with kept/undone counts).
 - **Try-on Shop:** the Curator agent ranks the catalog by the team's learned taste, the buyer's license needs and
   spending limit, and says why for each pick. Click to try an asset on the real design (watermarked) before
