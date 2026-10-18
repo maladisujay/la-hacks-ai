@@ -8,7 +8,7 @@ silently override a teammate, and lets the team try and buy design assets direct
 inside a spending limit, with every licence tied to the elements that use it.
 
 Built for LA Hacks AI Hackathon 2026 · Visa "The Future of Shopping" · Paper "Best Designed Hack" ·
-CREAO "AI-First Disruptor" · main track: Applied Intelligence. Devpost text: [`SUBMISSION.md`](SUBMISSION.md).
+CREAO "AI-First Disruptor" · main track: Applied Intelligence. Devpost text: [`SUBMISSION.md`](SUBMISSION.md) · demo script: [`DEMO.md`](DEMO.md).
 
 ![Workspace and Provenance Lens](design/screens/01-workspace-provenance-lens.png)
 
