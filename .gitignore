@@ -1,0 +1,8 @@
+.venv/
+.env
+data/
+tests/.data/
+__pycache__/
+*.pyc
+.pytest_cache/
+agent1*_data.json

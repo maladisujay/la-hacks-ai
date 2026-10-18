@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "properties": {
+    "licence_id": {
+      "type": "string"
+    },
+    "file_slug": {
+      "type": "string"
+    },
+    "asset_id": {
+      "type": "string"
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "personal",
+        "commercial",
+        "extended"
+      ]
+    },
+    "spot_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "member_id": {
+      "type": "string"
+    },
+    "amount_cents": {
+      "type": "integer"
+    },
+    "payment_ref": {
+      "type": "string"
+    },
+    "via": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "licence_id",
+    "file_slug",
+    "asset_id",
+    "tier",
+    "payment_ref"
+  ],
+  "name": "Licence"
+}

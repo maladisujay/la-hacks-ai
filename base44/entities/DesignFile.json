@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "slug": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "team_slug": {
+      "type": "string"
+    },
+    "heading": {
+      "type": "string"
+    },
+    "frames": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "spots": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "placements": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "slug",
+    "name",
+    "team_slug"
+  ],
+  "name": "DesignFile"
+}

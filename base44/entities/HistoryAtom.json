@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "properties": {
+    "file_slug": {
+      "type": "string"
+    },
+    "element_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "edit",
+        "prompt",
+        "rationale",
+        "rule",
+        "purchase",
+        "conflict",
+        "lock"
+      ]
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": [
+        "human",
+        "ai"
+      ]
+    },
+    "author_id": {
+      "type": "string"
+    },
+    "on_behalf_of": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "before": {
+      "type": "object"
+    },
+    "after": {
+      "type": "object"
+    },
+    "via": {
+      "type": "string"
+    },
+    "licence_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "file_slug",
+    "kind",
+    "actor_type",
+    "summary"
+  ],
+  "name": "HistoryAtom"
+}

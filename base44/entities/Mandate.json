@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "member_id": {
+      "type": "string"
+    },
+    "limit_cents": {
+      "type": "integer"
+    },
+    "period": {
+      "type": "string"
+    },
+    "spent_cents": {
+      "type": "integer"
+    },
+    "allowed_licences": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "set_by": {
+      "type": "string"
+    },
+    "expires": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "member_id",
+    "limit_cents",
+    "spent_cents"
+  ],
+  "name": "Mandate"
+}

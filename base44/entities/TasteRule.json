@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "properties": {
+    "team_slug": {
+      "type": "string"
+    },
+    "rule_key": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "team",
+        "personal",
+        "split"
+      ]
+    },
+    "applies_to": {
+      "type": "string"
+    },
+    "requires": {
+      "type": "object"
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "kept": {
+      "type": "integer"
+    },
+    "undone": {
+      "type": "integer"
+    },
+    "pinned": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "team_slug",
+    "text",
+    "scope"
+  ],
+  "name": "TasteRule"
+}

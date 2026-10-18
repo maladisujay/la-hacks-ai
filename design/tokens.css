@@ -1,0 +1,37 @@
+/* Strata design tokens, exported from the Paper file ("drafting table" system).
+   The AI drafts in dashed blue pencil; people ink in solid. --color-sample-* and --font-sample-*
+   belong only to the sample client site ("tally."), never to Strata's own UI. */
+:root {
+  --color-vellum: #F6F3EC;      /* page ground */
+  --color-board: #FDFCF8;       /* panels */
+  --color-sunken: #EFEBE1;      /* canvas well */
+  --color-ink: #2A2925;         /* text, human strokes */
+  --color-graphite: #615D54;    /* secondary text */
+  --color-lead: #7A766C;        /* meta text */
+  --color-hairline: #D6D0C2;    /* 1px rules */
+  --color-control: #8C8678;     /* input borders */
+  --color-ai-text: #2F5B85;     /* AI words */
+  --color-ai-stroke: #6A90B8;   /* AI dashed strokes */
+  --color-ai-fill: #E3EEF7;     /* AI tint */
+  --color-tape-text: #85600F;   /* conflicts, flags */
+  --color-tape-fill: #F5EAC9;
+  --color-eraser-text: #3D6A3A; /* done, paid */
+  --color-eraser-fill: #E6EFDF;
+  --color-highlight: #FBF0A6;   /* current selection only */
+  --color-priya: #E7E1F1; --color-priya-ink: #55467A;
+  --color-alex: #DCEDE8;  --color-alex-ink: #2D665C;
+  --color-sam: #F4E2E5;   --color-sam-ink: #86404F;
+  --color-sample-navy: #14254A; --color-sample-mint: #2FD18B; --color-sample-mint-soft: #E3F8EE;
+
+  --font-ui: "Atkinson Hyperlegible Next", system-ui, sans-serif;  /* headings 600-700, body 400 */
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;           /* times, prices, IDs */
+  --font-hand: "Shantell Sans", cursive;                            /* human margin notes, max 3 per screen */
+  --font-sample-display: "Bricolage Grotesque", sans-serif;
+  --font-sample-body: "Plus Jakarta Sans", sans-serif;
+
+  --text-xs: 12px; --text-sm: 13px; --text-base: 15px; --text-lg: 18px;
+  --text-xl: 22px; --text-2xl: 28px; --text-3xl: 40px;
+  --spacing-1: 4px; --spacing-2: 8px; --spacing-3: 12px; --spacing-4: 16px;
+  --spacing-6: 24px; --spacing-8: 32px; --spacing-12: 48px; --spacing-16: 64px;
+  --radius-control: 4px; --radius-panel: 8px;
+}

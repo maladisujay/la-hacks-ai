@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "properties": {
+    "file_slug": {
+      "type": "string"
+    },
+    "frame": {
+      "type": "string"
+    },
+    "element_id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "text",
+        "image",
+        "rect",
+        "slot",
+        "icon-row"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "x": {
+      "type": "number"
+    },
+    "y": {
+      "type": "number"
+    },
+    "w": {
+      "type": "number"
+    },
+    "h": {
+      "type": "number"
+    },
+    "props": {
+      "type": "object"
+    },
+    "z": {
+      "type": "integer"
+    },
+    "locked_props": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "locked_by": {
+      "type": "string"
+    },
+    "authorship": {
+      "type": "string",
+      "enum": [
+        "human",
+        "ai"
+      ]
+    }
+  },
+  "required": [
+    "file_slug",
+    "element_id",
+    "kind"
+  ],
+  "name": "Element"
+}

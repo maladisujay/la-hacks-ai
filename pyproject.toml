@@ -1,0 +1,26 @@
+[project]
+name = "strata-agents"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "fastapi>=0.143.3",
+    "httpx>=0.28.1",
+    "langchain-core>=1.6.12",
+    "langchain-openai>=1.7.2",
+    "langgraph>=1.2.16",
+    "langgraph-checkpoint-sqlite>=3.1.2",
+    "pillow>=13.0.0",
+    "pydantic>=2.14.1",
+    "python-dotenv>=1.2.4",
+    "stripe>=16.0.0",
+    "uagents>=0.26.1",
+    "uagents-core>=0.4.12",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

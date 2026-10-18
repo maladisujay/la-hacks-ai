@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "file_slug": {
+      "type": "string"
+    },
+    "element_id": {
+      "type": "string"
+    },
+    "prop": {
+      "type": "string"
+    },
+    "parties": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "kept",
+        "replaced",
+        "asked"
+      ]
+    }
+  },
+  "required": [
+    "file_slug",
+    "element_id",
+    "status"
+  ],
+  "name": "Conflict"
+}

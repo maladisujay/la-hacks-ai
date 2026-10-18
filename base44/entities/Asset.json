@@ -1,0 +1,55 @@
+{
+  "type": "object",
+  "properties": {
+    "asset_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "creator": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "illustration",
+        "icon-set"
+      ]
+    },
+    "style": {
+      "type": "string"
+    },
+    "colours": {
+      "type": "integer"
+    },
+    "palette": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "prices": {
+      "type": "object"
+    },
+    "files": {
+      "type": "string"
+    },
+    "image_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "asset_id",
+    "title",
+    "kind",
+    "prices"
+  ],
+  "name": "Asset"
+}
