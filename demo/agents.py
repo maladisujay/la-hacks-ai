@@ -58,12 +58,12 @@ def _unwrap(body: dict) -> dict:
 
 TASK = {"curate": "shortlist", "teammate": "edit", "catchup": "catchup"}
 SHAPE = {
-    "curate": '{"summary": "...", "shortlist": [{"asset_id": "...", "rank": 1, "score": 1.2, "why": "...", '
+    "curate": '{"summary": "<one sentence, max 25 words>", "shortlist": [{"asset_id": "...", "rank": 1, "score": 1.2, "why": "...", '
               '"fits": ["rule text"], "breaks": ["rule text"]}]}',
-    "teammate": '{"action": "edit|conflict|decline", "props": {"prop": "new value"}, "reason": "...", '
-                '"summary": "...", "prop": "locked prop if conflict", "wants": "wanted value if conflict", '
+    "teammate": '{"action": "edit|conflict|decline", "props": {"prop": "new value"}, "reason": "<one sentence, max 25 words>", '
+                '"summary": "<what changed, max 10 words>", "prop": "locked prop if conflict", "wants": "wanted value if conflict", '
                 '"rule_ids": ["..."]}',
-    "catchup": '{"lines": ["..."], "question": "..."}',
+    "catchup": '{"lines": ["<max 5 lines, max 16 words each>"], "question": "<one short question or empty>"}',
 }
 NEEDS = {"curate": "shortlist", "teammate": "action", "catchup": "lines"}
 

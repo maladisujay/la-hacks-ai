@@ -137,7 +137,24 @@ class AgentAsk(BaseModel):
 
 def local_time(iso: str) -> str:
     from datetime import datetime
-    return datetime.fromisoformat(iso).astimezone().strftime("%a %H:%M")
+    d = datetime.fromisoformat(iso).astimezone()
+    return d.strftime("%H:%M") if d.date() == datetime.now().astimezone().date() else d.strftime("%a %H:%M")
+
+
+def saw_summary(kind: str, ctx: dict) -> list[str]:
+    """Plain list of what the agent was sent, shown in the UI. Card details are never part of any context."""
+    if kind == "curate":
+        md = ctx["mandate"]
+        n = sum(a["kind"] == ctx["spot"]["kind"] for a in ctx["catalog"])
+        return [f"{len(ctx['rules'])} team rules with their kept / undone counts",
+                f"{n} {ctx['spot']['kind'].replace('_', ' ')}s in the catalog with prices",
+                f"{ctx['member']}'s limit: ${md['limit_cents'] // 100} a month, ${md['spent_cents'] / 100:.2f} spent, "
+                f"set by {md['set_by']}"]
+    if kind == "teammate":
+        return [f"The {ctx['element']['name'].lower()} and its locked props",
+                f"The last {len(ctx['history'])} changes to it", f"{len(ctx['rules'])} team rules"]
+    return [f"{len(ctx['events'])} changes by others since you last looked",
+            f"{len(ctx['open_conflicts'])} open conflicts"]
 
 
 def rules_view() -> list[dict]:
@@ -167,7 +184,8 @@ def context_for(kind: str, ask: AgentAsk) -> dict:
                "element": S["elements"][h["element_key"]]["name"], "summary": h["summary"],
                "reason": h.get("ai_reason"), "at": local_time(h["at"])}
               for h in S["history"]
-              if h["at"] > since and h["author"] != m and h.get("on_behalf_of") != m]
+              if h["at"] > since and h["author"] != m and h.get("on_behalf_of") != m
+              and not (h["kind"] == "prompt" and h["actor"] == "ai")]
     opens = [{"element": S["elements"][c["element_key"]]["name"], "question": c["question"]}
              for c in S["conflicts"] if c["status"] == "open" and m in (c["locked_by"], c["member"])]
     return {"member": m, "since": since, "events": events, "open_conflicts": opens}
@@ -198,7 +216,7 @@ async def start_agent(kind: str, ask: AgentAsk):
         raise HTTPException(503, f"The {kind} agent isn't connected. Add CREAO_{agents.ROLES[kind]}_APP_ID "
                                  f"and CREAO_{agents.ROLES[kind]}_KEY to .env and restart.")
     ctx = context_for(kind, ask)
-    run = {"id": uid("r"), "kind": kind, "member": ask.member, "request": ask.request,
+    run = {"saw": saw_summary(kind, ctx), "id": uid("r"), "kind": kind, "member": ask.member, "request": ask.request,
            "element_key": ask.element_key, "spot_key": ask.spot_key, "licence": ask.licence,
            "status": "queued", "mode": how, "run_id": None, "started": agents.now(), "finished": None,
            "message": ""}
@@ -247,13 +265,15 @@ def apply_curate(run: dict, reply: dict) -> None:
         i.setdefault("breaks", [])
     key = f"{run['member']}:{run['spot_key'] or 'hero_illustration'}"
     S["shortlists"][key] = {"summary": reply.get("summary", ""), "items": items, "licence": run["licence"],
-                            "run_id": run["run_id"], "mode": run["mode"], "at": agents.now()}
+                            "run_id": run["run_id"], "mode": run["mode"], "at": agents.now(),
+                            "saw": run.get("saw", [])}
     run["message"] = reply.get("summary", "")
     atom(element_key=run["spot_key"] or "hero_illustration", kind="rule", actor="ai", author="Strata",
          on_behalf_of=run["member"], summary=f"Shortlisted {len(items)} assets",
          ai_reason=reply.get("summary", ""), status="info")
 
 
+PROP_NAME = {"color": "colour", "font_size": "size", "font_weight": "weight", "bg": "background"}
 HEX = re.compile(r"#[0-9a-fA-F]{6}")
 
 
@@ -280,13 +300,13 @@ def apply_teammate(run: dict, reply: dict) -> None:
         prop = reply.get("prop") or (locked[0] if locked else "")
         wants = reply.get("wants") or str(props.get(prop, ""))
         c = {"id": uid("c"), "element_key": el["key"], "prop": prop, "locked_by": el["locked_by"],
-             "locked_value": el["props"].get(prop), "member": m, "wants": wants,
+             "locked_value": el["props"].get(prop), "member": m, "wants": wants, "request": run["request"],
              "reason": reply.get("reason", ""), "status": "open", "at": agents.now(),
              "rule_ids": reply.get("rule_ids") or [],
              "question": f"{m} wants {prop} {wants}; {el['locked_by']} locked it. Keep or change?"}
         S["conflicts"].append(c)
         atom(element_key=el["key"], kind="conflict", actor="ai", author="Strata", on_behalf_of=m,
-             summary=f"Stopped: would change {el['locked_by']}'s locked {prop}", ai_reason=c["reason"],
+             summary=f"Stopped: would change {el['locked_by']}'s locked {PROP_NAME.get(prop, prop)}", ai_reason=c["reason"],
              conflict_id=c["id"], status="info")
         run["message"] = c["reason"]
         return
@@ -307,9 +327,10 @@ def apply_teammate(run: dict, reply: dict) -> None:
 
 
 def apply_catchup(run: dict, reply: dict) -> None:
-    lines = [str(x)[:200] for x in reply.get("lines", [])][:5]
+    lines = [str(x)[:300] for x in reply.get("lines", [])][:5]
     S["catchups"][run["member"]] = {"lines": lines, "question": reply.get("question", ""),
-                                    "run_id": run["run_id"], "mode": run["mode"], "at": agents.now()}
+                                    "run_id": run["run_id"], "mode": run["mode"], "at": agents.now(),
+                                    "saw": run.get("saw", [])}
     run["message"] = lines[0] if lines else ""
 
 
@@ -364,7 +385,7 @@ def resolve(cid: str, who: Who):
     if who.choice == "ask":
         c["status"] = "asked"
         atom(element_key=el["key"], kind="prompt", actor="human", author=m,
-             summary=f"Asked {c['locked_by']} about the {c['prop']}")
+             summary=f"Asked {c['locked_by']} about the {PROP_NAME.get(c['prop'], c['prop'])}")
     elif who.choice in ("keep", "use"):
         if m not in (c["locked_by"], "Priya"):
             raise HTTPException(403, f"Only {c['locked_by']} can decide this")
@@ -372,15 +393,19 @@ def resolve(cid: str, who: Who):
             c["status"] = "kept"
             bump(c.get("rule_ids", []), "kept")
             atom(element_key=el["key"], kind="lock", actor="human", author=m,
-                 summary=f"Kept the locked {c['prop']}")
+                 summary=f"Kept the locked {PROP_NAME.get(c['prop'], c['prop'])}")
         else:
             value = HEX.search(c["wants"] or "")
-            if value and c["prop"] in EDITABLE[el["kind"]]:
+            if not value or c["prop"] not in EDITABLE[el["kind"]]:
+                raise HTTPException(409, "Strata didn't say which value to use; ask it again with a specific value")
+            if value:
                 before = {c["prop"]: el["props"].get(c["prop"])}
                 el["props"][c["prop"]] = value.group(0).upper()
                 el["locked_props"] = [p for p in el["locked_props"] if p != c["prop"]]
+                if not el["locked_props"]:
+                    el["locked_by"] = None
                 atom(element_key=el["key"], kind="edit", actor="human", author=m,
-                     summary=f"Unlocked and changed {c['prop']} for {c['member']}", before=before,
+                     summary=f"Unlocked and changed the {PROP_NAME.get(c['prop'], c['prop'])} for {c['member']}", before=before,
                      after={c["prop"]: el["props"][c["prop"]]})
             c["status"] = "replaced"
             bump(c.get("rule_ids", []), "undone")
@@ -513,8 +538,10 @@ def approve(cart_id: str, who: Who):
 
 
 @app.post("/api/cart/{cart_id}/pay")
-async def pay(cart_id: str):
+async def pay(cart_id: str, who: Who):
     cart = cart_of(cart_id)
+    if who.member != cart["member"]:
+        raise HTTPException(403, f"Only {cart['member']} can pay for this; it's on their limit")
     if cart["status"] in ("paid", "paying"):  # idempotent: a double click never charges twice
         return cart
     if cart["status"] != "ready":
@@ -555,6 +582,10 @@ def fulfil(cart: dict) -> None:
            "amount_cents": cart["amount_cents"] + (old["amount_cents"] if old else 0), "paid_cents": cart["amount_cents"],
            "payment_ref": cart["auth_code"], "card": f"Visa {pm['last4']}", "network_token": cart["network_token"],
            "status": "active", "at": now, "how": how}
+    for l in S["licences"]:  # a higher license for the same asset and element supersedes lower ones
+        if l["status"] == "active" and l["asset_id"] == lic["asset_id"] and cart["element_key"] in l["element_keys"] \
+                and TIER_RANK[l["tier"]] < TIER_RANK[lic["tier"]]:
+            l["status"] = "upgraded"
     if old:
         old["status"] = "upgraded"
     S["licences"].append(lic)
@@ -577,8 +608,8 @@ def export_check():
         aid = el["props"].get("asset_id")
         if not aid:
             continue
-        lic = next((l for l in S["licences"] if l["asset_id"] == aid and l["status"] == "active"
-                    and el["key"] in l["element_keys"]), None)
+        lic = max((l for l in S["licences"] if l["asset_id"] == aid and l["status"] == "active"
+                   and el["key"] in l["element_keys"]), key=lambda l: TIER_RANK[l["tier"]], default=None)
         a = asset(aid)
         if not lic:
             issues.append({"element_key": el["key"], "element": el["name"], "asset": a["title"],
