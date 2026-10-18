@@ -52,19 +52,21 @@ tokenized, the agents never see it, and every purchase leaves an intent → cart
 
 ## CREAO agents
 
-The AI in Strata is three CREAO agents. The app holds the UI, data and payments; for every AI step it sends
-the agent the context (team rules, history, catalog, spending limit) through CREAO's API trigger, and applies
-the agent's JSON reply: a ranked shortlist, an edit with its reason, a conflict card, or a catch-up.
+The AI in Strata is a CREAO agent with three skills. The app holds the UI, data and payments; for every AI
+step it sends the agent the context (team rules, history, catalog, spending limit) through CREAO's API trigger,
+and applies the agent's answer: a ranked shortlist, an edit with its reason, a conflict card, or a catch-up.
 
-| Agent | Agent ID | What it does |
-| --- | --- | --- |
-| Strata Curator | `<agent id>` | Ranks the catalog against the team's learned taste, licence and spending limit; writes the shop shortlist |
-| Strata Teammate | `<agent id>` | Edits one element, records its reason in the element's history, opens a conflict instead of undoing a locked choice |
-| Strata Catch-up | `<agent id>` | Summarises what teammates and the AI changed since you last looked |
+**Agent ID:** `92cfb66e-0730-47b9-8bce-2efafab3f6c8` (Strata)
+
+| Skill | What it does |
+| --- | --- |
+| Shortlist | Ranks the catalog against the team's learned taste, license and spending limit; explains each pick |
+| Edit | Edits one element and records its reason, or opens a conflict instead of undoing a teammate's lock |
+| Catch-up | Summarises what teammates and the AI changed since you last looked |
 
 Example agent run: `<share link>`
 
-Remove the agents and Strata stops working: the shop has no shortlist, the AI can't edit or explain, and
+Remove the agent and Strata stops working: the shop has no shortlist, the AI can't edit or explain, and
 nobody gets caught up.
 
 ```

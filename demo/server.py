@@ -32,7 +32,7 @@ import agents  # noqa: E402
 from seed_data import EDITABLE, payment_method, seed  # noqa: E402
 
 PORT = int(os.getenv("STRATA_DEMO_PORT", "8044"))
-STATE_FILE = HERE / "state.json"
+STATE_FILE = Path(os.getenv("STRATA_STATE_FILE", HERE / "state.json"))
 LICENCE_LABELS = {"personal": "Personal · not for client work", "commercial": "Commercial · site and app",
                   "extended": "Extended · print and merchandise"}
 TIER_RANK = {"personal": 0, "commercial": 1, "extended": 2}
@@ -135,6 +135,11 @@ class AgentAsk(BaseModel):
     budget_cents: int = 4000
 
 
+def local_time(iso: str) -> str:
+    from datetime import datetime
+    return datetime.fromisoformat(iso).astimezone().strftime("%a %H:%M")
+
+
 def rules_view() -> list[dict]:
     return [{k: r[k] for k in ("id", "text", "scope", "members", "kept", "undone", "requires")} for r in S["rules"]]
 
@@ -160,7 +165,7 @@ def context_for(kind: str, ask: AgentAsk) -> dict:
     since = S["last_seen"].get(m, "")
     events = [{"who": h["author"], "actor": h["actor"], "on_behalf_of": h.get("on_behalf_of"),
                "element": S["elements"][h["element_key"]]["name"], "summary": h["summary"],
-               "reason": h.get("ai_reason"), "at": h["at"]}
+               "reason": h.get("ai_reason"), "at": local_time(h["at"])}
               for h in S["history"]
               if h["at"] > since and h["author"] != m and h.get("on_behalf_of") != m]
     opens = [{"element": S["elements"][c["element_key"]]["name"], "question": c["question"]}

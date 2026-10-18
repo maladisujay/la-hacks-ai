@@ -45,14 +45,14 @@ Strata is a shared design workspace with one AI teammate that lives in the file.
   creators get sales from inside the tool where the decision happens; teams stop shipping unlicensed assets.
 
 ## CREAO · AI-First Disruptor
-All reasoning runs on three CREAO agents, called through CREAO's API trigger with `request` + `context_json` and
-replying with JSON that the app applies:
-- **Strata Curator:** ranks assets against learned rules, license and spending limit, and explains each pick.
-- **Strata Teammate:** decides the smallest edit, writes its reason, or stops with a conflict on locked props.
-- **Strata Catch-up:** turns the change history into a short, personal summary.
+Every AI step in Strata runs on one CREAO agent with three skills, called through CREAO's API trigger with
+`request` + `context_json` (the app tells it the task); the app applies its answer:
+- **Shortlist:** ranks assets against the team's learned rules, the license and the spending limit, and explains each pick.
+- **Edit:** decides the smallest change to one element and writes its reason, or stops with a conflict on a teammate's lock.
+- **Catch-up:** turns the change history into a short, personal summary with one open question.
 
-Remove the agents and Strata stops working: no shortlist, no AI edits, no catch-up.
-Agent run: `<share link>` · Agent IDs: Curator `<id>`, Teammate `<id>`, Catch-up `<id>`.
+Remove the agent and Strata stops working: no shortlist, no AI edits, no catch-up.
+CREAO agent ID: `92cfb66e-0730-47b9-8bce-2efafab3f6c8` · Agent run: `<share link>`.
 
 ## Paper · Best Designed Hack
 Every screen was designed by hand in Paper first, then built to match ("drafting table" system: the AI drafts in

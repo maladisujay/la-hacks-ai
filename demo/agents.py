@@ -56,13 +56,105 @@ def _unwrap(body: dict) -> dict:
     return body.get("data", body) if isinstance(body.get("data"), dict) else body
 
 
+TASK = {"curate": "shortlist", "teammate": "edit", "catchup": "catchup"}
+SHAPE = {
+    "curate": '{"summary": "...", "shortlist": [{"asset_id": "...", "rank": 1, "score": 1.2, "why": "...", '
+              '"fits": ["rule text"], "breaks": ["rule text"]}]}',
+    "teammate": '{"action": "edit|conflict|decline", "props": {"prop": "new value"}, "reason": "...", '
+                '"summary": "...", "prop": "locked prop if conflict", "wants": "wanted value if conflict", '
+                '"rule_ids": ["..."]}',
+    "catchup": '{"lines": ["..."], "question": "..."}',
+}
+NEEDS = {"curate": "shortlist", "teammate": "action", "catchup": "lines"}
+
+
+def contract(kind: str, request: str) -> str:
+    """Appended to every request: the app reads this exact JSON, whatever the agent's report style."""
+    return (f"{request}\n\nOUTPUT CONTRACT (the Strata app parses this): end your reply with exactly one JSON "
+            f"object in this shape, every field filled, inside a ```json block, and also save it as result.json: "
+            f"{SHAPE[kind]}").strip()
+
+
+def _candidates(text: str) -> list[dict]:
+    out = []
+    for m in re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", text or "", re.S):
+        try:
+            out.append(json.loads(m.group(1)))
+        except json.JSONDecodeError:
+            pass
+    try:
+        out.append(parse_json(text))
+    except (ValueError, json.JSONDecodeError):
+        pass
+    return out
+
+
+def _from_markdown(kind: str, md: str, context: dict) -> dict | None:
+    """Fallback for agents that write a markdown report instead of JSON."""
+    if kind == "curate":
+        rule_text = {r["id"]: r["text"] for r in context.get("rules", [])}
+        items = []
+        blocks = re.split(r"\n(?=#{2,4}\s*\d+\.)", md)
+        for b in blocks:
+            head = re.match(r"#{2,4}\s*(\d+)\.\s*`?([\w-]+)`?.*?score\s*(-?[\d.]+)", b)
+            if not head:
+                continue
+            lines = [l.strip() for l in b.splitlines()[1:] if l.strip() and not l.strip().startswith("-")]
+            ids = lambda label: re.findall(r"`([\w-]+)`", (re.search(rf"\*\*{label}[^*]*\*\*(.*)", b) or [None, ""])[1])
+            items.append({"asset_id": head.group(2), "rank": int(head.group(1)), "score": float(head.group(3)),
+                          "why": lines[0] if lines else "", "fits": [rule_text.get(i, i) for i in ids("Fit")],
+                          "breaks": [rule_text.get(i, i) for i in ids("Broken")]})
+        return {"summary": "", "shortlist": items} if items else None
+    if kind == "catchup":
+        lines = [re.sub(r"^[-*\d.\s]+", "", l).strip() for l in md.splitlines() if re.match(r"\s*([-*]|\d+\.)\s", l)]
+        return {"lines": [l for l in lines if l][:5], "question": ""} if lines else None
+    return None
+
+
+def _first_sentences(text: str, n: int = 2) -> str:
+    plain = re.sub(r"[*`#_]", "", text or "").strip()
+    return " ".join(re.split(r"(?<=[.!?])\s+", plain)[:n])
+
+
+def extract(kind: str, request: str, context: dict, texts: list[str]) -> dict:
+    """Pick the agent's answer from its reply, chat text or saved files; fill gaps the app can infer."""
+    found = [c for t in texts for c in _candidates(t) if NEEDS[kind] in c]
+    # prefer the most complete object
+    reply = max(found, key=lambda c: len(json.dumps(c)), default=None)
+    if kind == "curate" and (not reply or not reply.get("shortlist")):
+        md = next((r for t in texts if (r := _from_markdown(kind, t, context))), None)
+        if md:
+            md["summary"] = next((c["summary"] for t in texts for c in _candidates(t) if c.get("summary")), "")
+            reply = md
+    if kind == "catchup" and not reply:
+        reply = next((r for t in texts if (r := _from_markdown(kind, t, context))), None)
+    if not reply:
+        raise ValueError("the agent's reply had no usable result")
+    chat = texts[1] if len(texts) > 1 else ""
+    if kind == "curate" and not reply.get("summary"):
+        reply["summary"] = _first_sentences(chat, 2) or "Ranked by your team's learned taste."
+    if kind == "teammate":
+        el = context.get("element", {})
+        reply.setdefault("reason", reply.get("summary") or _first_sentences(chat, 1))
+        if not reply.get("reason"):
+            reply["reason"] = _first_sentences(chat, 1)
+        if reply.get("action") == "conflict":
+            reply.setdefault("prop", "")
+            if not reply["prop"]:
+                reply["prop"] = next((p for p in el.get("locked_props", []) if p in json.dumps(reply) + chat),
+                                     (el.get("locked_props") or [""])[0])
+            if not reply.get("wants"):
+                reply["wants"] = request
+    return reply
+
+
 async def run_creao(kind: str, request: str, context: dict, on_started) -> tuple[dict, str]:
     """Start a run, wait for it, return (parsed reply, raw text)."""
     app_id, key = creds(kind)
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     base = f"{CREAO_API}/apps/{app_id}/runs"
-    task = {"curate": "shortlist", "teammate": "edit", "catchup": "catchup"}[kind]
-    inputs = {"request": request, "context_json": json.dumps({"task": task, **context}, ensure_ascii=False)}
+    inputs = {"request": contract(kind, request),
+              "context_json": json.dumps({"task": TASK[kind], **context}, ensure_ascii=False)}
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(base, headers=headers, json={"inputs": inputs})
         if r.status_code >= 400:
@@ -80,8 +172,13 @@ async def run_creao(kind: str, request: str, context: dict, on_started) -> tuple
             status = body.get("status")
             if status == "completed":
                 result = body.get("result") or {}
-                text = result.get("text") or result.get("chatText") or ""
-                return parse_json(text), text
+                texts = [result.get("text") or "", result.get("chatText") or ""]
+                for art in sorted(result.get("artifacts") or [], key=lambda a: "json" not in str(a.get("type"))):
+                    if art.get("url"):
+                        f = await client.get(art["url"], headers=headers, follow_redirects=True)
+                        if f.status_code < 400 and len(f.text) < 200_000:
+                            texts.append(f.text)
+                return extract(kind, request, context, texts), "\n\n---\n\n".join(texts)
             if status in ("failed", "cancelled", "error"):
                 raise RuntimeError(f"CREAO run {status}: {body.get('errorCode') or body.get('error') or ''}")
     raise RuntimeError("CREAO run took too long")
