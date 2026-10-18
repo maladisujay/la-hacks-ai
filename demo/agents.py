@@ -22,8 +22,12 @@ TIMEOUT_SECONDS = 8 * 60
 
 
 def creds(kind: str) -> tuple[str | None, str | None]:
+    """A dedicated agent per job if configured, else the one combined Strata agent (CREAO_STRATA_*)."""
     role = ROLES[kind]
-    return os.getenv(f"CREAO_{role}_APP_ID") or None, os.getenv(f"CREAO_{role}_KEY") or None
+    app_id, key = os.getenv(f"CREAO_{role}_APP_ID") or None, os.getenv(f"CREAO_{role}_KEY") or None
+    if app_id and key:
+        return app_id, key
+    return os.getenv("CREAO_STRATA_APP_ID") or None, os.getenv("CREAO_STRATA_KEY") or None
 
 
 def offline() -> bool:
@@ -57,7 +61,8 @@ async def run_creao(kind: str, request: str, context: dict, on_started) -> tuple
     app_id, key = creds(kind)
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     base = f"{CREAO_API}/apps/{app_id}/runs"
-    inputs = {"request": request, "context_json": json.dumps(context, ensure_ascii=False)}
+    task = {"curate": "shortlist", "teammate": "edit", "catchup": "catchup"}[kind]
+    inputs = {"request": request, "context_json": json.dumps({"task": task, **context}, ensure_ascii=False)}
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(base, headers=headers, json={"inputs": inputs})
         if r.status_code >= 400:
