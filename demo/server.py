@@ -6,19 +6,20 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import json
 import os
 import re
+import secrets
+import string
 import sys
 import uuid
+from datetime import date
 from pathlib import Path
 
-import httpx
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -28,12 +29,14 @@ sys.path.insert(0, str(HERE))
 load_dotenv(REPO / ".env")
 
 import agents  # noqa: E402
-from seed_data import EDITABLE, seed  # noqa: E402
+from seed_data import EDITABLE, payment_method, seed  # noqa: E402
 
 PORT = int(os.getenv("STRATA_DEMO_PORT", "8044"))
 STATE_FILE = HERE / "state.json"
 LICENCE_LABELS = {"personal": "Personal · not for client work", "commercial": "Commercial · site and app",
                   "extended": "Extended · print and merchandise"}
+TIER_RANK = {"personal": 0, "commercial": 1, "extended": 2}
+SPOT_KIND = {"illustration_slot": "illustration", "icon_row": "icon_set"}
 
 app = FastAPI(title="Strata demo")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -50,6 +53,7 @@ def load() -> dict:
 
 
 S = load()
+S.setdefault("payment_method", payment_method())
 
 
 def save() -> None:
@@ -86,11 +90,6 @@ def atom(**kw) -> dict:
     return a
 
 
-def stripe_key() -> str | None:
-    key = os.getenv("STRIPE_SECRET_KEY", "")
-    return key if key.startswith("sk_test_") else None  # test mode only, never live
-
-
 # ---------------------------------------------------------------- state
 
 @app.get("/")
@@ -100,8 +99,10 @@ def index():
 
 @app.get("/api/state")
 def state():
-    return {**S, "modes": {k: agents.mode(k) for k in agents.ROLES},
-            "payments": "stripe-test" if stripe_key() else "simulated", "licence_labels": LICENCE_LABELS}
+    pm = {k: v for k, v in S["payment_method"].items() if k != "token"}  # the browser never sees the token
+    return {**S, "payment_method": pm, "modes": {k: agents.mode(k) for k in agents.ROLES},
+            "payments": "visa-simulated", "licence_labels": LICENCE_LABELS, "editable": EDITABLE,
+            "export": export_check(), "today": date.today().isoformat()}
 
 
 @app.post("/api/reset")
@@ -172,6 +173,21 @@ async def start_agent(kind: str, ask: AgentAsk):
     if kind not in agents.ROLES:
         raise HTTPException(404, "unknown agent")
     member_ok(ask.member)
+    ask.request = ask.request.strip()[:500]
+    ask.budget_cents = max(0, min(1_000_000, ask.budget_cents))
+    if kind == "teammate":
+        ask.element_key = ask.element_key or "hero_heading"
+        if not EDITABLE[element(ask.element_key)["kind"]]:
+            raise HTTPException(400, "Strata edits text and style here; use the shop for art and icons")
+        if not ask.request:
+            raise HTTPException(400, "Tell Strata what to change")
+    if kind == "curate":
+        ask.spot_key = ask.spot_key or "hero_illustration"
+        if element(ask.spot_key)["kind"] not in SPOT_KIND:
+            raise HTTPException(400, "The shop fills the hero illustration or the feature row")
+    if any(r["kind"] == kind and r["member"] == ask.member and r["status"] in ("queued", "running")
+           and r["element_key"] == ask.element_key and r["spot_key"] == ask.spot_key for r in S["runs"]):
+        raise HTTPException(409, "Strata is already working on this")
     how = agents.mode(kind)
     if how == "missing":
         raise HTTPException(503, f"The {kind} agent isn't connected. Add CREAO_{agents.ROLES[kind]}_APP_ID "
@@ -210,8 +226,14 @@ async def execute(run: dict, ctx: dict) -> None:
 
 
 def apply_curate(run: dict, reply: dict) -> None:
-    known = {a["id"] for a in S["catalog"]}
-    items = [i for i in reply.get("shortlist", []) if i.get("asset_id") in known][:4]
+    spot = element(run["spot_key"] or "hero_illustration")
+    known = {a["id"] for a in S["catalog"] if a["kind"] == SPOT_KIND.get(spot["kind"])}
+    items, seen = [], set()
+    for i in reply.get("shortlist", []):
+        if isinstance(i, dict) and i.get("asset_id") in known and i["asset_id"] not in seen:
+            seen.add(i["asset_id"])
+            items.append(i)
+    items = items[:4]
     if not items:
         raise ValueError("the curator returned no catalog items")
     for n, i in enumerate(items, 1):
@@ -313,7 +335,11 @@ def judge(hid: str, verdict: str, who: Who):
         h.update(status="kept", kept_by=m)
         bump(h.get("rule_ids", []), "kept")
     elif verdict == "undo":
-        el["props"].update(h["before"])
+        after = h.get("after") or {}
+        still = {k: v for k, v in (h.get("before") or {}).items() if k in after and el["props"].get(k) == after[k]}
+        if not still:
+            raise HTTPException(409, "Someone changed this since; nothing to undo")
+        el["props"].update(still)
         el.update(authorship="human", last_author=m)
         h.update(status="undone", undone_by=m)
         bump(h.get("rule_ids", []), "undone")
@@ -359,7 +385,7 @@ def resolve(cid: str, who: Who):
     return {"ok": True}
 
 
-# ---------------------------------------------------------------- shop, limit, checkout, licences
+# ---------------------------------------------------------------- shop, limit, checkout, licenses
 
 class CartIn(BaseModel):
     member: str
@@ -373,114 +399,169 @@ def money(c: int) -> str:
     return f"${c / 100:.2f}"
 
 
+def dollars(c: int) -> str:
+    return f"${c // 100}" if c % 100 == 0 else money(c)
+
+
+def expired(md: dict) -> bool:
+    return md.get("expires", "9999") < date.today().isoformat()
+
+
+def intent_text(m: str, md: dict) -> str:
+    top = max(md["allowed_licences"], key=TIER_RANK.get)
+    until = date.fromisoformat(md["expires"]).strftime("%b %-d")
+    if expired(md):
+        return f"{m}'s spending limit ended {until}. Anything new needs {md['set_by']}'s OK."
+    return f"{m} may spend up to {dollars(md['limit_cents'])} a month on {top} licenses, until {until}. Set by {md['set_by']}."
+
+
+def check_limit(m: str, licence: str, price: int) -> str | None:
+    """None if the purchase fits the mandate, else why not."""
+    md = S["mandates"][m]
+    left = md["limit_cents"] - md["spent_cents"]
+    if expired(md):
+        return f"{m}'s spending limit expired; needs {md['set_by']}'s OK"
+    if licence not in md["allowed_licences"]:
+        return f"{licence.capitalize()} licenses aren't in {m}'s limit; needs {md['set_by']}'s OK"
+    if price > left:
+        return f"Over {m}'s limit ({money(max(0, left))} left); needs {md['set_by']}'s OK"
+    return None
+
+
+def team_rule_people() -> str:
+    return ", ".join(sorted({p for r in S["rules"] if r["scope"] == "team" for p in r["members"]}))
+
+
 @app.post("/api/cart")
 def make_cart(body: CartIn):
     m, a, el = member_ok(body.member), asset(body.asset_id), element(body.element_key)
     if body.licence not in LICENCE_LABELS:
-        raise HTTPException(400, "unknown licence")
-    price = a["prices"][body.licence]
+        raise HTTPException(400, "unknown license")
+    if SPOT_KIND.get(el["kind"]) != a["kind"]:
+        raise HTTPException(400, f"{a['title']} doesn't fit the {el['name'].lower()}")
+    old = None
     if body.upgrade_of:
-        old = next((l for l in S["licences"] if l["licence_id"] == body.upgrade_of), None)
-        if old:
-            price = max(0, price - old["amount_cents"])
+        old = next((l for l in S["licences"] if l["licence_id"] == body.upgrade_of and l["status"] == "active"), None)
+        if not old or old["asset_id"] != a["id"] or TIER_RANK[body.licence] <= TIER_RANK[old["tier"]]:
+            raise HTTPException(409, "Nothing to upgrade")
+    else:
+        have = next((l for l in S["licences"] if l["asset_id"] == a["id"] and l["status"] == "active"
+                     and el["key"] in l["element_keys"] and TIER_RANK[l["tier"]] >= TIER_RANK[body.licence]), None)
+        if have:
+            raise HTTPException(409, f"Already licensed ({have['tier']})")
+    price = a["prices"][body.licence] - (old["amount_cents"] if old else 0)
+    price = max(0, price)
     md = S["mandates"][m]
-    left = md["limit_cents"] - md["spent_cents"]
-    within = price <= left and body.licence in md["allowed_licences"]
+    why_not = check_limit(m, body.licence, price)
+    sl = S["shortlists"].get(f"{m}:{el['key']}") or {}
     now = agents.now()
-    trail = [
-        {"step": "Intent", "text": f"{m} wants {a['title']} for the {el['name'].lower()}", "at": now},
-        {"step": "Cart", "text": f"{a['title']} · {LICENCE_LABELS[body.licence]} · {money(price)}", "at": now},
-        {"step": "Limit", "ok": within, "at": now,
-         "text": (f"Within {m}'s {money(md['limit_cents'])} limit set by {md['set_by']} · "
-                  f"{money(left - price)} left after" if within else
-                  f"Over {m}'s limit ({money(left)} left) · needs {md['set_by']}'s OK")},
-    ]
+    what = (f"Upgrade {old['member']}'s personal license to commercial, {money(price)}" if old else
+            f"One {body.licence} license, {dollars(price)}")
+    trail = [{"step": "Intent", "ok": not expired(md), "text": intent_text(m, md), "at": now},
+             {"step": "Cart", "ok": not why_not, "at": now,
+              "text": f"{what}. {'Fits the limit.' if not why_not else why_not + '.'}"}]
     cart = {"id": uid("cart_"), "member": m, "asset_id": a["id"], "title": a["title"], "licence": body.licence,
             "element_key": el["key"], "amount_cents": price, "upgrade_of": body.upgrade_of,
-            "status": "ready" if within else "needs_approval", "trail": trail, "created": now}
+            "suggested": any(i.get("asset_id") == a["id"] for i in sl.get("items", [])),
+            "status": "needs_approval" if why_not else "ready", "trail": trail, "created": now}
     S["carts"][cart["id"]] = cart
     save()
     return cart
 
 
+def cart_of(cart_id: str) -> dict:
+    cart = S["carts"].get(cart_id)
+    if not cart:
+        raise HTTPException(404, "no such cart")
+    return cart
+
+
+@app.post("/api/cart/{cart_id}/ask")
+def ask_approval(cart_id: str, who: Who):
+    cart = cart_of(cart_id)
+    if cart["status"] not in ("needs_approval", "declined"):
+        raise HTTPException(409, "This cart doesn't need approval")
+    if who.member != cart["member"]:
+        raise HTTPException(403, f"Only {cart['member']} can ask for this one")
+    lead = S["mandates"][cart["member"]]["set_by"]
+    if not cart.get("approval_requested"):
+        cart.update(approval_requested=True, status="needs_approval")
+        cart["trail"].append({"step": "Approval", "text": f"Asked {lead} to approve {money(cart['amount_cents'])}",
+                              "at": agents.now()})
+        save()
+    return cart
+
+
 @app.post("/api/cart/{cart_id}/approve")
 def approve(cart_id: str, who: Who):
-    cart = S["carts"].get(cart_id) or {}
-    lead = S["mandates"][cart.get("member", "Alex")]["set_by"]
+    cart = cart_of(cart_id)
+    lead = S["mandates"][cart["member"]]["set_by"]
     if who.member != lead:
         raise HTTPException(403, f"Only {lead} can approve")
-    cart["status"] = "ready"
-    cart["trail"].append({"step": "Approved", "text": f"{lead} approved this one purchase", "at": agents.now()})
+    if cart["status"] not in ("needs_approval", "declined"):
+        raise HTTPException(409, "Nothing to approve")
+    cart.update(status="ready", approved_by=lead)
+    cart["trail"].append({"step": "Approved", "text": f"{lead} approved this one purchase, {money(cart['amount_cents'])}",
+                          "at": agents.now()})
     save()
     return cart
 
 
 @app.post("/api/cart/{cart_id}/pay")
 async def pay(cart_id: str):
-    cart = S["carts"].get(cart_id)
-    if not cart or cart["status"] != "ready":
-        raise HTTPException(409, "cart isn't ready to pay")
-    key = stripe_key()
-    if not key:
-        fulfil(cart, f"sim_{uuid.uuid4().hex[:10]}", "Simulated test payment (no Stripe key set)")
-        return {"done": True, "cart": cart}
-    base = f"http://localhost:{PORT}"
-    form = {
-        "mode": "payment",
-        "line_items[0][quantity]": "1",
-        "line_items[0][price_data][currency]": "usd",
-        "line_items[0][price_data][unit_amount]": str(max(cart["amount_cents"], 50)),
-        "line_items[0][price_data][product_data][name]": f"{cart['title']} · {cart['licence']} licence",
-        "success_url": f"{base}/paid?session_id={{CHECKOUT_SESSION_ID}}",
-        "cancel_url": f"{base}/?cancelled={cart_id}",
-        "metadata[cart_id]": cart_id,
-        "metadata[member]": cart["member"],
-    }
-    async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.post("https://api.stripe.com/v1/checkout/sessions", data=form, auth=(key, ""))
-    if r.status_code >= 400:
-        raise HTTPException(502, f"Stripe: {r.json().get('error', {}).get('message', r.status_code)}")
-    session = r.json()
-    cart["trail"].append({"step": "Payment", "text": "Stripe test checkout opened", "at": agents.now()})
+    cart = cart_of(cart_id)
+    if cart["status"] in ("paid", "paying"):  # idempotent: a double click never charges twice
+        return cart
+    if cart["status"] != "ready":
+        raise HTTPException(409, "This cart isn't ready to pay")
+    why_not = None if cart.get("approved_by") else check_limit(cart["member"], cart["licence"], cart["amount_cents"])
+    if why_not:  # the limit is re-checked at pay time: it may have changed since the cart was made
+        cart["status"] = "declined"
+        cart["trail"].append({"step": "Payment", "ok": False, "text": f"Declined before charging: {why_not}",
+                              "at": agents.now()})
+        save()
+        raise HTTPException(402, f"Payment declined: {why_not}.")
+    cart["status"] = "paying"
     save()
-    return {"url": session["url"]}
+    await asyncio.sleep(1.2)  # simulated Visa authorization; nothing real is charged
+    pm = S["payment_method"]
+    auth = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+    cart.update(auth_code=auth, network_token=f"vtok_…{pm['last4']}")
+    cart["trail"].append({"step": "Payment", "at": agents.now(),
+                          "text": f"Visa ending {pm['last4']} · authorized (simulated) · auth {auth} · "
+                                  "Strata's agents never see the card"})
+    fulfil(cart)
+    return cart
 
 
-@app.get("/paid")
-async def paid(session_id: str):
-    key = stripe_key()
-    if not key:
-        return RedirectResponse("/")
-    async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.get(f"https://api.stripe.com/v1/checkout/sessions/{session_id}", auth=(key, ""))
-    s = r.json()
-    cart = S["carts"].get((s.get("metadata") or {}).get("cart_id", ""))
-    if cart and s.get("payment_status") == "paid" and cart["status"] != "paid":
-        fulfil(cart, s.get("payment_intent") or session_id, "Paid with Stripe test mode (Visa test card)")
-    return RedirectResponse(f"/?paid={cart['id'] if cart else ''}")
-
-
-def fulfil(cart: dict, payment_ref: str, how: str) -> None:
-    if cart["status"] == "paid":
+def fulfil(cart: dict) -> None:
+    if cart.get("licence_id"):
         return
-    now = agents.now()
-    lic = {"licence_id": f"L-{uuid.uuid4().hex[:4].upper()}", "asset_id": cart["asset_id"],
-           "tier": cart["licence"], "element_keys": [cart["element_key"]], "member": cart["member"],
-           "amount_cents": cart["amount_cents"], "payment_ref": payment_ref, "status": "active", "at": now}
-    for old in S["licences"]:
-        if old["licence_id"] == cart.get("upgrade_of"):
-            old["status"] = "upgraded"
-    S["licences"].append(lic)
-    S["mandates"][cart["member"]]["spent_cents"] += cart["amount_cents"]
+    now, pm, m = agents.now(), S["payment_method"], cart["member"]
     el = element(cart["element_key"])
+    old = next((l for l in S["licences"] if l["licence_id"] == cart.get("upgrade_of")), None)
+    how = ([f"Upgraded {old['member']}'s personal license {old['licence_id']}"] if old else
+           [f"Suggested by Strata from a team rule ({team_rule_people()})", f"tried on by {m}"] if cart.get("suggested")
+           else [f"Picked by {m}", f"tried on by {m}"])
+    how += ([f"approved by {cart['approved_by']}"] if cart.get("approved_by") else []) + \
+        ["paid with Visa (simulated)", f"placed on the {el['name'].lower()}"]
+    lic = {"licence_id": f"L-{uuid.uuid4().hex[:4].upper()}", "asset_id": cart["asset_id"],
+           "tier": cart["licence"], "element_keys": [cart["element_key"]], "member": m,
+           "amount_cents": cart["amount_cents"] + (old["amount_cents"] if old else 0), "paid_cents": cart["amount_cents"],
+           "payment_ref": cart["auth_code"], "card": f"Visa {pm['last4']}", "network_token": cart["network_token"],
+           "status": "active", "at": now, "how": how}
+    if old:
+        old["status"] = "upgraded"
+    S["licences"].append(lic)
+    S["mandates"][m]["spent_cents"] += cart["amount_cents"]
     el["props"]["asset_id"] = cart["asset_id"]
-    el.update(authorship="human", last_author=cart["member"])
-    atom(element_key=el["key"], kind="purchase", actor="human", author=cart["member"],
-         summary=f"Bought {cart['title']} · {cart['licence']} licence · {money(cart['amount_cents'])}")
-    cart["status"] = "paid"
-    cart["licence_id"] = lic["licence_id"]
-    cart["trail"] += [{"step": "Payment", "text": f"{how} · {payment_ref}", "at": now},
-                      {"step": "Receipt", "text": f"Licence {lic['licence_id']} tied to {el['name']}", "at": now}]
+    el.update(authorship="human", last_author=m)
+    atom(element_key=el["key"], kind="purchase", actor="human", author=m,
+         summary=f"Bought {cart['title']} · {cart['licence']} license · {money(cart['amount_cents'])} "
+                 f"with Visa ending {pm['last4']}")
+    cart.update(status="paid", licence_id=lic["licence_id"])
+    cart["trail"].append({"step": "Receipt", "text": f"License {lic['licence_id']} filed against the {el['name'].lower()}",
+                          "at": now})
     save()
 
 
@@ -496,10 +577,11 @@ def export_check():
         a = asset(aid)
         if not lic:
             issues.append({"element_key": el["key"], "element": el["name"], "asset": a["title"],
-                           "problem": "no licence", "asset_id": aid})
+                           "problem": "no license", "asset_id": aid, "kind": a["kind"]})
         elif lic["tier"] == "personal" and S["file"]["client_work"]:
             issues.append({"element_key": el["key"], "element": el["name"], "asset": a["title"], "asset_id": aid,
-                           "problem": f"personal licence ({lic['member']}) in client work",
+                           "problem": f"personal license ({lic['member']}) in client work", "kind": a["kind"],
+                           "member": lic["member"],
                            "licence_id": lic["licence_id"],
                            "upgrade_cents": a["prices"]["commercial"] - lic["amount_cents"]})
     return {"ok": not issues, "issues": issues}
@@ -509,5 +591,5 @@ if __name__ == "__main__":
     print(f"Strata demo → http://localhost:{PORT}")
     for k in agents.ROLES:
         print(f"  {k:9} agent: {agents.mode(k)}")
-    print(f"  payments: {'Stripe test' if stripe_key() else 'simulated'}")
+    print("  payments: Visa, simulated (no real charge)")
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")

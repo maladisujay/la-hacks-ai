@@ -7,8 +7,8 @@ It remembers who decided what and why, learns the team's taste from what people 
 silently override a teammate, and lets the team try and buy design assets directly on their own design,
 inside a spending limit, with every licence tied to the elements that use it.
 
-Built for LA Hacks AI Hackathon 2026 · Base44 "Build Something People Want" · Visa "The Future of Shopping" ·
-Paper "Best Designed Hack" · CREAO "AI-First Disruptor" · main track: Applied Intelligence.
+Built for LA Hacks AI Hackathon 2026 · Visa "The Future of Shopping" · Paper "Best Designed Hack" ·
+CREAO "AI-First Disruptor" · main track: Applied Intelligence. Devpost text: [`SUBMISSION.md`](SUBMISSION.md).
 
 ![Workspace and Provenance Lens](design/screens/01-workspace-provenance-lens.png)
 
@@ -19,13 +19,12 @@ Paper "Best Designed Hack" · CREAO "AI-First Disruptor" · main track: Applied 
 | `design/screens/` | The UI designed by hand in Paper: design system and six product screens |
 | `design/tokens.css` | Design tokens exported from Paper ("drafting table" system) |
 | `design/assets/` | Original illustrations and icon sets sold in the demo catalog (drawn by us) |
-| `base44/BASE44_BRIEF.md` | The step-by-step prompts used to build the app in Base44, plus submission text |
-| `base44/entities/` | Entity schemas for the Base44 app |
+| `base44/BASE44_BRIEF.md` | Prompts for a later Base44 version (not part of this submission) |
+| `base44/entities/` | Entity schemas for the later Base44 version |
 | `demo/` | The working app: workspace, Provenance Lens, AI teammate, Try-on Shop, checkout, licences (FastAPI + one page) |
 | `base44/CREAO_BRIEF.md` | The three CREAO agents (Curator, Teammate, Catch-up): specs, setup, wiring |
-| `base44/functions/runAgent.ts`, `creaoWebhook.ts` | Base44 functions that start CREAO runs and receive their results |
+| `base44/functions/` | Base44 functions for the later version (CREAO runs, webhook, agent API) |
 | `scripts/run_creao.py` | Start a CREAO agent run from the command line |
-| `base44/functions/agentApi.ts` | Backend function contract for external agents (optional) |
 | `docs/Strata_Project_Brief.pdf` | Project brief: problem, features, method |
 | `strata_agents/` | Prototype: multi-agent ASI:One shopping flow (Fetch.ai uAgents + LangGraph). Not part of this submission |
 
@@ -47,9 +46,9 @@ uv sync
 uv run python demo/server.py      # → http://localhost:8044
 ```
 
-Put the CREAO agent IDs and API keys in `.env` (see `.env.example`). With `STRIPE_SECRET_KEY=sk_test_...` the
-checkout goes through Stripe test mode (Visa test card `4242 4242 4242 4242`); without it the payment step is
-a clearly labelled simulation.
+Put the CREAO agent IDs and API keys in `.env` (see `.env.example`). Payment is a **simulated Visa
+authorization** (Visa offered no sandbox for the hackathon and asked teams to simulate): the team card is
+tokenized, the agents never see it, and every purchase leaves an intent → cart → payment → receipt trail.
 
 ## CREAO agents
 
@@ -82,7 +81,7 @@ difference (Tufte), low-saturation colour (Valdez & Mehrabian), and sketchy draf
 
 ## Payments
 
-Stripe test mode with a Visa test card (`4242 4242 4242 4242`). Nothing real is charged.
+Simulated Visa authorization on the team's tokenized card (Visa ending 4242). Nothing real is charged.
 
 ## Prototype agents (not submitted)
 

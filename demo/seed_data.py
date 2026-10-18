@@ -5,6 +5,7 @@ Every catalog asset is original art in `design/assets/`; nothing third-party is 
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 
 
@@ -44,6 +45,12 @@ CATALOG = [
     {"id": "soft-circles", "title": "Soft circles", "creator": "Penny Studio", "kind": "icon_set", "style": "flat",
      "colours": 2, "palette": ["navy", "mint"], "prices": {"personal": 600, "commercial": 1400, "extended": 3000}},
 ]
+
+
+def payment_method() -> dict:
+    """The team's card on file. Only the server's checkout reads it; it never goes into agent context."""
+    return {"brand": "Visa", "last4": "4242", "holder": "Tally design · held by Priya",
+            "token": "vtok_" + secrets.token_hex(8)}
 
 
 def seed() -> dict:
@@ -92,7 +99,7 @@ def seed() -> dict:
          "before": {"font_size": 40, "font_weight": 700}, "after": {"font_size": 44, "font_weight": 800},
          "status": "kept", "rule_ids": ["r-heavy"], "at": _ago(minutes=40)},
         {"id": "h6", "element_key": "feature_row", "kind": "purchase", "actor": "human", "author": "Sam",
-         "on_behalf_of": None, "summary": "Bought Tiny coins icons · personal licence", "at": _ago(days=3)},
+         "on_behalf_of": None, "summary": "Bought Tiny coins icons · personal license", "at": _ago(days=3)},
         {"id": "h7", "element_key": "hero_subcopy", "kind": "edit", "actor": "human", "author": "Sam",
          "on_behalf_of": None, "summary": "Shortened the subcopy to two lines", "at": _ago(hours=2)},
         {"id": "h8", "element_key": "hero_illustration", "kind": "edit", "actor": "ai", "author": "Strata",
@@ -129,8 +136,11 @@ def seed() -> dict:
         },
         "licences": [
             {"licence_id": "L-0412", "asset_id": "tiny-coins", "tier": "personal", "element_keys": ["feature_row"],
-             "member": "Sam", "amount_cents": 400, "payment_ref": "seed", "status": "active", "at": _ago(days=3)},
+             "member": "Sam", "amount_cents": 400, "payment_ref": "seed", "status": "active", "at": _ago(days=3),
+             "how": ["Bought by Sam before the file was client work", "personal license only",
+                     "placed on the feature row"]},
         ],
+        "payment_method": payment_method(),
         "conflicts": [],
         "shortlists": {},
         "catchups": {},

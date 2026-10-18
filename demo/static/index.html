@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Strata</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect x=%271.5%27 y=%271.5%27 width=%2713%27 height=%2713%27 rx=%272%27 fill=%27%23F6F3EC%27 stroke=%27%232A2925%27/%3E%3Cpath d=%27M4 6h8M4 10h5%27 stroke=%27%236A90B8%27 stroke-dasharray=%272 1.5%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Shantell+Sans:wght@400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -17,18 +18,18 @@
   <aside id="panel">
     <div id="tabs"></div>
     <div id="panel-body"></div>
+    <div id="panel-foot"></div>
     <div id="ask">
       <div id="ask-status"></div>
       <div id="ask-rule" class="meta"></div>
       <form id="ask-form" autocomplete="off">
-        <input id="ask-input" placeholder="Ask Strata about this heading…">
+        <input id="ask-input" maxlength="500" aria-label="Ask Strata" placeholder="Ask Strata about this heading…">
         <button type="submit" aria-label="Send">↵</button>
       </form>
     </div>
   </aside>
 </main>
-<div id="overlay"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <script src="/static/app.js"></script>
 </body>
 </html>
